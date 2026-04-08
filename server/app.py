@@ -66,7 +66,7 @@ except ModuleNotFoundError:
 def list_tasks() -> List[TaskInfo]:
     return [
         TaskInfo(
-            task_id=task["id"],
+            task_id=task["task_id"],
             difficulty=task["difficulty"],
             description=task["description"],
             action_schema=FinanceOptimizerAction.model_json_schema()

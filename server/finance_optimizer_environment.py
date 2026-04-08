@@ -13,22 +13,25 @@ class FinanceOptimizerEnvironment(Environment):
 
     TASKS = [
         {
-            "id": "ledger_cleanup",
+            "task_id": "ledger_cleanup",
             "name": "Ledger Cleanup",
             "difficulty": "easy",
-            "description": "Correctly categorize 50 raw transactions."
+            "description": "Correctly categorize 50 raw transactions.",
+            "data_corpus": []
         },
         {
-            "id": "subscription_audit",
+            "task_id": "subscription_audit",
             "name": "Subscription Audit",
             "difficulty": "medium",
-            "description": "Identify and cancel duplicate or unused subscriptions."
+            "description": "Identify and cancel duplicate or unused subscriptions.",
+            "data_corpus": []
         },
         {
-            "id": "cash_flow",
+            "task_id": "cash_flow",
             "name": "Cash Flow Management",
             "difficulty": "hard",
-            "description": "Prevent overdraft by transferring funds before a large payment."
+            "description": "Prevent overdraft by transferring funds before a large payment.",
+            "data_corpus": []
         }
     ]
 
