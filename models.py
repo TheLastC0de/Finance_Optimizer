@@ -20,6 +20,7 @@ class FinanceOptimizerAction(Action):
     to_account: Optional[str] = Field(None, description="Destination account for TransferFunds")
     amount: Optional[float] = Field(None, description="Amount to transfer for TransferFunds")
     text: Optional[str] = Field(None, description="Text for SetAlert")
+    model_config = {"extra": "allow"}
 
 
 class FinanceOptimizerObservation(Observation):
@@ -28,3 +29,4 @@ class FinanceOptimizerObservation(Observation):
     checking_balance: float = Field(default=0.0, description="Checking account balance")
     savings_balance: float = Field(default=0.0, description="Savings account balance")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Task progress and scores")
+    model_config = {"extra": "allow"}

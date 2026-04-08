@@ -75,11 +75,11 @@ def list_tasks() -> List[TaskInfo]:
     ]
 
 @app.post("/grader")
-def get_grader_score(task_id: str, action: FinanceOptimizerAction) -> dict[str, Any]:
+def get_grader_score(task_id: str, action: dict[str, Any]) -> dict[str, Any]:
     if task_id not in TASK_REGISTRY:
         raise HTTPException(status_code=404, detail=f"Unknown task_id: {task_id}")
     
-    score = grade(action.model_dump(), task_id)
+    score = grade(action, task_id)
         
     return {
         "task_id": task_id,
