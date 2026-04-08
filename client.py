@@ -54,9 +54,7 @@ class FinanceOptimizerEnv(
         Returns:
             Dictionary representation suitable for JSON encoding
         """
-        return {
-            "message": action.message,
-        }
+        return action.model_dump()
 
     def _parse_result(self, payload: Dict) -> StepResult[FinanceOptimizerObservation]:
         """

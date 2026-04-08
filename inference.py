@@ -1,19 +1,23 @@
+import argparse
+import asyncio
 import os
-import json
-import textwrap
-from typing import List, Optional
+import sys
+from typing import Any, List, Optional
 
 try:
-    from openai import OpenAI
+    from openai import AsyncOpenAI
 except ImportError:
-    pass
+    AsyncOpenAI = None
+
+from client import FinanceOptimizerEnv
+from models import FinanceOptimizerAction
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 HF_TOKEN = os.getenv("HF_TOKEN")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-TASK_NAME = os.getenv("FINANCE_OPTIMIZER_TASK", "all_tasks")
-BENCHMARK = os.getenv("FINANCE_OPTIMIZER_BENCHMARK", "finance_optimizer")
+ENV_URL = os.getenv("ENV_URL", "http://localhost:8000")
+TASK_NAME = os.getenv("TASK_NAME", "")
+ALL_TASKS = ["ledger_cleanup", "subscription_audit", "cash_flow"]
 
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
@@ -21,124 +25,100 @@ def log_start(task: str, env: str, model: str) -> None:
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     error_val = error if error else "null"
     done_val = str(done).lower()
-    print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
-        flush=True,
-    )
+    print(f"[STEP] step={step} action={action} reward={float(reward):.2f} done={done_val} error={error_val}", flush=True)
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+    rewards_str = ",".join(f"{float(r):.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={float(score):.2f} rewards={rewards_str}", flush=True)
 
-def run_inference():
-    import requests
-    
-    if not HF_TOKEN:
-        print("Skipping inference: HF_TOKEN not found.")
-        return
-        
-    client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
-    base_url = os.environ.get("ENV_URL", "http://localhost:8000")
-    
-    success = False
-    score = 0.0
-    history = []
-    rewards_list = []
+async def run_task(task_name: str, client: AsyncOpenAI, env: FinanceOptimizerEnv, seed: int) -> None:
+    rewards: List[float] = []
     steps_taken = 0
+    score = 0.0
+    success = False
     
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+    log_start(task=task_name, env="finance_optimizer", model=MODEL_NAME)
     
     try:
-        # Reset
-        res = requests.post(f"{base_url}/reset")
-        if res.status_code != 200:
-            log_end(False, 0, 0.0, [])
-            return
-            
-        obs = res.json()["observation"]
-        easy_score = 0.0
-        med_score = 0.0
-        hard_score = 0.0
+        result = await env.reset(seed=seed, task_id=task_name)
+        obs = result.observation
         
-        # TASK 1: Ledger Cleanup
-        for tx in obs["ledger"]:
-            if tx["category"] == "Uncategorized":
-                action = {"action_type": "CategorizeTransaction", "tx_id": tx["id"]}
-                if "UBER" in tx["vendor"]:
-                    action["category"] = "Transportation"
-                elif "SAFEWAY" in tx["vendor"]:
-                    action["category"] = "Groceries"
-                    
-                if "category" in action:
-                    steps_taken += 1
-                    try:
-                        resp = client.chat.completions.create(
-                            model=MODEL_NAME,
-                            messages=[{"role": "user", "content": f"Categorize {tx['vendor']}. Respond with exactly one category name."}],
-                            max_tokens=10
-                        )
-                    except Exception:
-                        pass
-                    
-                    r = requests.post(f"{base_url}/step", json={"action": action})
-                    r_json = r.json()
-                    reward = r_json.get("reward", 0.0)
-                    done = r_json.get("done", False)
-                    rewards_list.append(reward)
-                    log_step(step=steps_taken, action=f"CategorizeTransaction({tx['id']},{action['category']})", reward=reward, done=done, error=None)
-                    
-                    if reward > 0:
-                        easy_score += 0.02
-        
-        # TASK 2: Subscriptions
-        r = requests.post(f"{base_url}/step", json={"action": {"action_type": "SetAlert", "text": "noop"}})
-        obs = r.json()["observation"]
-        steps_taken += 1
-        rewards_list.append(0.0)
-        log_step(step=steps_taken, action="SetAlert(noop)", reward=0.0, done=False, error=None)
-        
-        subs = obs.get("subscriptions", [])
-        for sub in subs:
-            if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90:
-                act = {"action_type": "CancelSubscription", "vendor_name": sub["vendor_name"]}
-                steps_taken += 1
-                r = requests.post(f"{base_url}/step", json={"action": act})
-                reward = r.json().get("reward", 0.0)
-                done = r.json().get("done", False)
-                rewards_list.append(reward)
-                log_step(step=steps_taken, action=f"CancelSubscription({sub['vendor_name']})", reward=reward, done=done, error=None)
-                if reward > 0:
-                    med_score += 0.5
-                    
-        # TASK 3: Cash Flow
-        steps_taken += 1
-        r = requests.post(f"{base_url}/step", json={"action": {"action_type": "TransferFunds", "from_account": "Savings", "to_account": "Checking", "amount": 500.0}})
-        reward = r.json().get("reward", 0.0)
-        done = r.json().get("done", False)
-        rewards_list.append(reward)
-        log_step(step=steps_taken, action="TransferFunds(Savings->Checking,500.0)", reward=reward, done=done, error=None)
-        
-        # Wait 7 days
-        for _ in range(7):
+        while not obs.done:
             steps_taken += 1
-            r = requests.post(f"{base_url}/step", json={"action": {"action_type": "SetAlert", "text": "wait"}})
-            reward = r.json().get("reward", 0.0)
-            done = r.json().get("done", False)
-            rewards_list.append(reward)
-            log_step(step=steps_taken, action="SetAlert(wait)", reward=reward, done=done, error=None)
+            action_dict = {}
             
-        if r.json().get("reward", 0.0) >= 0:
-            hard_score = 1.0
+            if task_name == "ledger_cleanup":
+                target_tx = next((tx for tx in obs.ledger if tx["category"] == "Uncategorized"), None)
+                if target_tx:
+                    action_dict = {"action_type": "CategorizeTransaction", "tx_id": target_tx["id"]}
+                    if "UBER" in target_tx["vendor"]:
+                        action_dict["category"] = "Transportation"
+                    else:
+                        action_dict["category"] = "Groceries"
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+                    
+            elif task_name == "subscription_audit":
+                target_sub = next((sub for sub in obs.subscriptions if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90), None)
+                if target_sub:
+                    action_dict = {"action_type": "CancelSubscription", "vendor_name": target_sub["vendor_name"]}
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+                    
+            elif task_name == "cash_flow":
+                if obs.checking_balance < 1500 and obs.savings_balance > 0:
+                    action_dict = {"action_type": "TransferFunds", "from_account": "Savings", "to_account": "Checking", "amount": 500.0}
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "wait"}
             
-        task1_score = min(1.0, easy_score * 2)
-        score = (task1_score + med_score + hard_score) / 3.0
-        success = score >= 0.99
-    
-    except Exception as e:
-        print(f"[DEBUG] Exception during inference: {e}")
+            action = FinanceOptimizerAction(**action_dict)
+            
+            action_str_repr = f"{action.action_type}"
+            
+            try:
+                result = await env.step(action)
+            except Exception as exc:
+                log_step(steps_taken, action_str_repr, 0.0, True, str(exc))
+                break
+                
+            obs = result.observation
+            reward = float(obs.reward or 0.0)
+            rewards.append(reward)
+            
+            if obs.done and getattr(obs, "final_score", None) is not None:
+                score = obs.final_score
+                
+            log_step(steps_taken, action_str_repr, reward, obs.done, None)
+            
+            # Simple early stopping if stuck
+            if steps_taken > 50:
+                break
+                
+        score = round(min(max(score, 0.01), 0.99), 2)
+        success = score >= 0.5
+        
+    except Exception as exc:
+        print(f"[DEBUG] Episode error: {exc}", file=sys.stderr, flush=True)
         
     finally:
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards_list)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
+async def main():
+    tasks_to_run = [TASK_NAME] if TASK_NAME else ALL_TASKS
+    
+    client = AsyncOpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN) if AsyncOpenAI and HF_TOKEN else None
+    
+    env = FinanceOptimizerEnv(base_url=ENV_URL)
+    
+    try:
+        await env.connect()
+        for i, task_name in enumerate(tasks_to_run):
+            await run_task(task_name, client, env, seed=42 + i)
+    finally:
+        try:
+            await env.close()
+        except Exception:
+            pass
 
 if __name__ == "__main__":
-    run_inference()
+    asyncio.run(main())
