@@ -1,5 +1,0 @@
-client
-graders
-inference
-models
-server

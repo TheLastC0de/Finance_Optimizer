@@ -3,10 +3,7 @@ from uuid import uuid4
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
-try:
-    from models import FinanceOptimizerAction, FinanceOptimizerObservation
-except ImportError:
-    from ..models import FinanceOptimizerAction, FinanceOptimizerObservation
+from models import FinanceOptimizerAction, FinanceOptimizerObservation
 
 import numpy as np
 from graders import LedgerGrader, SubscriptionGrader, CashFlowGrader
