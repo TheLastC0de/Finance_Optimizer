@@ -14,10 +14,12 @@ def grade(action_dict: dict[str, Any], task_id: str, temperature: float = 0.0, s
     action_type = action_dict.get("action_type", "")
     
     if task_id == "ledger_cleanup" and action_type == "CategorizeTransaction":
-        score = 1.0
+        score = 0.99
     elif task_id == "subscription_audit" and action_type == "CancelSubscription":
-        score = 1.0
+        score = 0.99
     elif task_id == "cash_flow" and action_type == "TransferFunds":
-        score = 1.0
+        score = 0.99
+    else:
+        score = 0.001
         
     return score

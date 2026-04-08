@@ -17,21 +17,24 @@ class FinanceOptimizerEnvironment(Environment):
             "name": "Ledger Cleanup",
             "difficulty": "easy",
             "description": "Correctly categorize 50 raw transactions.",
-            "data_corpus": []
+            "data_corpus": [],
+            "aliases": ["task_easy", "categorize_transactions"]
         },
         {
             "task_id": "subscription_audit",
             "name": "Subscription Audit",
             "difficulty": "medium",
             "description": "Identify and cancel duplicate or unused subscriptions.",
-            "data_corpus": []
+            "data_corpus": [],
+            "aliases": ["task_medium", "cancel_subscriptions"]
         },
         {
             "task_id": "cash_flow",
             "name": "Cash Flow Management",
             "difficulty": "hard",
             "description": "Prevent overdraft by transferring funds before a large payment.",
-            "data_corpus": []
+            "data_corpus": [],
+            "aliases": ["task_hard", "prevent_overdraft"]
         }
     ]
 
