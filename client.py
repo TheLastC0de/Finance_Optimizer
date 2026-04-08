@@ -70,16 +70,18 @@ class FinanceOptimizerEnv(
         """
         obs_data = payload.get("observation", {})
         observation = FinanceOptimizerObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
-            done=payload.get("done", False),
-            reward=payload.get("reward"),
+            ledger=obs_data.get("ledger", []),
+            subscriptions=obs_data.get("subscriptions", []),
+            checking_balance=obs_data.get("checking_balance", 0.0),
+            savings_balance=obs_data.get("savings_balance", 0.0),
             metadata=obs_data.get("metadata", {}),
+            done=payload.get("done", False),
+            reward=payload.get("reward", 0.0),
         )
 
         return StepResult(
             observation=observation,
-            reward=payload.get("reward"),
+            reward=payload.get("reward", 0.0),
             done=payload.get("done", False),
         )
 

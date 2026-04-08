@@ -1,3 +1,4 @@
+from typing import List, Dict, Any
 from uuid import uuid4
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
@@ -10,6 +11,27 @@ except ModuleNotFoundError:
 class FinanceOptimizerEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
 
+    TASKS = [
+        {
+            "id": "ledger_cleanup",
+            "name": "Ledger Cleanup",
+            "difficulty": "easy",
+            "description": "Correctly categorize 50 raw transactions."
+        },
+        {
+            "id": "subscription_audit",
+            "name": "Subscription Audit",
+            "difficulty": "medium",
+            "description": "Identify and cancel duplicate or unused subscriptions."
+        },
+        {
+            "id": "cash_flow",
+            "name": "Cash Flow Management",
+            "difficulty": "hard",
+            "description": "Prevent overdraft by transferring funds before a large payment."
+        }
+    ]
+
     def __init__(self):
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self.ledger = []
@@ -17,9 +39,15 @@ class FinanceOptimizerEnvironment(Environment):
         self.checking_balance = 1200.0
         self.savings_balance = 1000.0
         self.days_passed = 0
+        self.task_scores = {
+            "ledger_cleanup": 0.0,
+            "subscription_audit": 0.0,
+            "cash_flow": 0.0
+        }
 
     def reset(self) -> FinanceOptimizerObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
+        self.task_scores = {k: 0.0 for k in self.task_scores}
         
         self.ledger = []
         for i in range(25):
@@ -40,13 +68,19 @@ class FinanceOptimizerEnvironment(Environment):
         return self._get_obs(reward=0.0)
 
     def _get_obs(self, reward: float = 0.0, done: bool = False):
+        metadata = {
+            "tasks": self.TASKS,
+            "task_scores": self.task_scores,
+            "step": self._state.step_count
+        }
         return FinanceOptimizerObservation(
             ledger=self.ledger,
             subscriptions=self.subscriptions,
             checking_balance=self.checking_balance,
             savings_balance=self.savings_balance,
             done=done,
-            reward=reward
+            reward=reward,
+            metadata=metadata
         )
 
     def step(self, action: FinanceOptimizerAction) -> FinanceOptimizerObservation:
@@ -60,10 +94,12 @@ class FinanceOptimizerEnvironment(Environment):
                         if tx["category"] != "Transportation":
                             tx["category"] = "Transportation"
                             reward += 0.1
+                            self.task_scores["ledger_cleanup"] = min(1.0, self.task_scores["ledger_cleanup"] + 0.02)
                     elif tx["vendor"] == "SAFEWAY #33" and action.category == "Groceries":
                         if tx["category"] != "Groceries":
                             tx["category"] = "Groceries"
                             reward += 0.1
+                            self.task_scores["ledger_cleanup"] = min(1.0, self.task_scores["ledger_cleanup"] + 0.02)
                             
         elif action.action_type == "CancelSubscription":
             new_subs = []
@@ -71,6 +107,7 @@ class FinanceOptimizerEnvironment(Environment):
                 if sub["vendor_name"] == action.vendor_name:
                     if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90:
                         reward += 0.5
+                        self.task_scores["subscription_audit"] = min(1.0, self.task_scores["subscription_audit"] + 0.5)
                 else:
                     new_subs.append(sub)
             self.subscriptions = new_subs
@@ -85,18 +122,21 @@ class FinanceOptimizerEnvironment(Environment):
         self.days_passed += 1
         done = False
         
+        # Grader for Task 3: Cash Flow
         for sub in self.subscriptions:
             if sub.get("due_in_days") is not None:
                 if sub["due_in_days"] == self.days_passed:
                     if self.checking_balance >= sub["cost"]:
                         self.checking_balance -= sub["cost"]
+                        self.task_scores["cash_flow"] = 1.0
                     else:
                         self.checking_balance -= sub["cost"]
                         self.checking_balance -= 35.0  # overdraft
                         reward -= 2.0
+                        self.task_scores["cash_flow"] = 0.0
                         done = True
                         
-        if self._state.step_count >= 50:
+        if self._state.step_count >= 100:
             done = True
             
         return self._get_obs(reward=reward, done=done)
@@ -104,3 +144,7 @@ class FinanceOptimizerEnvironment(Environment):
     @property
     def state(self) -> State:
         return self._state
+
+    @property
+    def tasks(self) -> List[Dict[str, Any]]:
+        return self.TASKS

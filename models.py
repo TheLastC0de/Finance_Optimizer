@@ -1,8 +1,13 @@
 from typing import Any, Dict, List, Literal, Optional
 
 from openenv.core.env_server.types import Action, Observation
-from pydantic import Field
+from pydantic import Field, BaseModel
 
+class TaskInfo(BaseModel):
+    task_id: str
+    difficulty: str
+    description: str
+    action_schema: Dict[str, Any]
 
 class FinanceOptimizerAction(Action):
     action_type: Literal["CategorizeTransaction", "CancelSubscription", "TransferFunds", "SetAlert"] = Field(
@@ -22,3 +27,4 @@ class FinanceOptimizerObservation(Observation):
     subscriptions: List[Dict[str, Any]] = Field(default_factory=list, description="Active recurring subscriptions")
     checking_balance: float = Field(default=0.0, description="Checking account balance")
     savings_balance: float = Field(default=0.0, description="Savings account balance")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Task progress and scores")

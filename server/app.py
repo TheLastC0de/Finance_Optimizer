@@ -36,10 +36,10 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 try:
-    from finance_optimizer.models import FinanceOptimizerAction, FinanceOptimizerObservation
+    from finance_optimizer.models import FinanceOptimizerAction, FinanceOptimizerObservation, TaskInfo
     from finance_optimizer.server.finance_optimizer_environment import FinanceOptimizerEnvironment
 except ModuleNotFoundError:
-    from models import FinanceOptimizerAction, FinanceOptimizerObservation
+    from models import FinanceOptimizerAction, FinanceOptimizerObservation, TaskInfo
     from server.finance_optimizer_environment import FinanceOptimizerEnvironment
 
 
@@ -51,6 +51,44 @@ app = create_app(
     env_name="finance_optimizer",
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
 )
+
+from typing import Any, List
+from fastapi import HTTPException
+
+try:
+    from finance_optimizer.server.tasks import TASK_REGISTRY
+    from finance_optimizer.server.grader import grade
+except ModuleNotFoundError:
+    from server.tasks import TASK_REGISTRY
+    from server.grader import grade
+
+@app.get("/tasks")
+def list_tasks() -> List[TaskInfo]:
+    return [
+        TaskInfo(
+            task_id=task["id"],
+            difficulty=task["difficulty"],
+            description=task["description"],
+            action_schema=FinanceOptimizerAction.model_json_schema()
+        )
+        for task in TASK_REGISTRY.values()
+    ]
+
+@app.post("/grader")
+def get_grader_score(task_id: str, action: FinanceOptimizerAction) -> dict[str, Any]:
+    if task_id not in TASK_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"Unknown task_id: {task_id}")
+    
+    score = grade(action.model_dump(), task_id)
+        
+    return {
+        "task_id": task_id,
+        "score": score,
+        "passed": 1 if score > 0.5 else 0,
+        "total": 1,
+        "metric": "finance_optimizer_alignment",
+    }
+
 
 
 def main(host: str = "0.0.0.0", port: int = 8000):
