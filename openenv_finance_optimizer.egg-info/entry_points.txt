@@ -1,0 +1,2 @@
+[console_scripts]
+server = finance_optimizer.server.app:main
