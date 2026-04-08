@@ -9,7 +9,7 @@ except ImportError:
     from ..models import FinanceOptimizerAction, FinanceOptimizerObservation
 
 import numpy as np
-from graders import ledger_grader, subscription_grader, cash_flow_grader
+from server import grader
 
 class FinanceOptimizerEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
@@ -163,21 +163,17 @@ class FinanceOptimizerEnvironment(Environment):
         task_id = self._state.task_id if hasattr(self._state, "task_id") else "ledger_cleanup"
         
         if task_id == "ledger_cleanup":
-            # Count categorical matches
             correct = sum(1 for tx in self.ledger if tx.get("category") in ["Transportation", "Groceries"])
-            return ledger_grader.grade(correct, 50)
+            return grader.grade_ledger(correct, 50)
             
         elif task_id == "subscription_audit":
-            # Count remaining unnecessary subs
             unnecessary_remaining = sum(1 for sub in self.subscriptions if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90)
-            # Initial were 2 (Netflix_Duplicate and Gym)
             cancelled = 2 - unnecessary_remaining
-            return subscription_grader.grade(cancelled, 2)
+            return grader.grade_subscription(cancelled, 2)
             
         elif task_id == "cash_flow":
-            # Improvement in balance vs baseline (starting 1200)
             improvement = self.checking_balance - 1200.0
-            return cash_flow_grader.grade(improvement, 500.0) # Assume 500 is a good target
+            return grader.grade_cash_flow(improvement, 500.0)
             
         return 0.001
 

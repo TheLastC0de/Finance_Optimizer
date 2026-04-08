@@ -3,10 +3,6 @@ __init__.py
 client.py
 models.py
 pyproject.toml
-graders/__init__.py
-graders/cash_flow_grader.py
-graders/ledger_grader.py
-graders/subscription_grader.py
 openenv_finance_optimizer.egg-info/PKG-INFO
 openenv_finance_optimizer.egg-info/SOURCES.txt
 openenv_finance_optimizer.egg-info/dependency_links.txt
@@ -16,4 +12,7 @@ openenv_finance_optimizer.egg-info/top_level.txt
 server/__init__.py
 server/app.py
 server/finance_optimizer_environment.py
+server/grader.py
 server/tasks.py
+tests/test_environment.py
+tests/test_graders.py

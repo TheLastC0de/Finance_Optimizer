@@ -31,7 +31,7 @@ tasks:
     description: "Correctly categorize 50 raw transactions."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.ledger_grader:LedgerGrader
+    grader: server.grader:LedgerGrader
     aliases:
       - task_easy
       - categorize_transactions
@@ -40,7 +40,7 @@ tasks:
     description: "Identify and cancel duplicate or unused subscriptions."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.subscription_grader:SubscriptionGrader
+    grader: server.grader:SubscriptionGrader
     aliases:
       - task_medium
       - cancel_subscriptions
@@ -49,7 +49,7 @@ tasks:
     description: "Prevent overdraft by transferring funds before a large payment."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.cash_flow_grader:CashFlowGrader
+    grader: server.grader:CashFlowGrader
     aliases:
       - task_hard
       - prevent_overdraft
