@@ -4,9 +4,9 @@ from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
 try:
-    from finance_optimizer.models import FinanceOptimizerAction, FinanceOptimizerObservation
-except ModuleNotFoundError:
     from models import FinanceOptimizerAction, FinanceOptimizerObservation
+except ImportError:
+    from ..models import FinanceOptimizerAction, FinanceOptimizerObservation
 
 import numpy as np
 from graders import ledger_grader, subscription_grader, cash_flow_grader

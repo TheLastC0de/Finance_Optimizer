@@ -8,6 +8,13 @@ version: "1.0.0"
 description: >
   Personal Finance & Subscription Optimizer environment.
   Helps users categorize bank ledgers, audit subscriptions, and manage cash flow.
+author: "Rohan Pendharkar"
+tags:
+  - openenv
+  - finance
+  - advisor
+  - management
+license: "MIT"
 endpoints:
   - /reset
   - /step
