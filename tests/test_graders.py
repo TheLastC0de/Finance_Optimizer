@@ -1,40 +1,44 @@
-from server import grader
+from graders import LedgerGrader, SubscriptionGrader, CashFlowGrader
+
+ledger_grader = LedgerGrader()
+subscription_grader = SubscriptionGrader()
+cash_flow_grader = CashFlowGrader()
 
 class TestLedgerGrader:
     def test_perfect(self):
-        assert grader.grade_ledger(50, 50) == 0.999
+        assert ledger_grader(50, 50) == 0.999
 
     def test_half(self):
-        assert grader.grade_ledger(25, 50) == 0.5
+        assert ledger_grader(25, 50) == 0.5
 
     def test_zero(self):
-        assert grader.grade_ledger(0, 50) == 0.001
+        assert ledger_grader(0, 50) == 0.001
 
     def test_zero_baseline(self):
-        assert grader.grade_ledger(10, 0) == 0.001
+        assert ledger_grader(10, 0) == 0.001
 
 class TestSubscriptionGrader:
     def test_perfect(self):
-        assert grader.grade_subscription(2, 2) == 0.999
+        assert subscription_grader(2, 2) == 0.999
         
     def test_half(self):
-        assert grader.grade_subscription(1, 2) == 0.5
+        assert subscription_grader(1, 2) == 0.5
         
     def test_zero(self):
-        assert grader.grade_subscription(0, 2) == 0.001
+        assert subscription_grader(0, 2) == 0.001
         
     def test_zero_baseline(self):
-        assert grader.grade_subscription(1, 0) == 0.999
+        assert subscription_grader(1, 0) == 0.999
 
 class TestCashFlowGrader:
     def test_perfect(self):
-        assert grader.grade_cash_flow(500, 500) == 0.999
+        assert cash_flow_grader(500, 500) == 0.999
         
     def test_half(self):
-        assert grader.grade_cash_flow(250, 500) == 0.5
+        assert cash_flow_grader(250, 500) == 0.5
         
     def test_zero(self):
-        assert grader.grade_cash_flow(0, 500) == 0.001
+        assert cash_flow_grader(0, 500) == 0.001
         
     def test_zero_baseline(self):
-        assert grader.grade_cash_flow(100, 0) == 0.5
+        assert cash_flow_grader(100, 0) == 0.5
