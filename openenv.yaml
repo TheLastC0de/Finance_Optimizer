@@ -9,6 +9,7 @@ tasks:
     name: Ledger Cleanup
     difficulty: easy
     description: "Correctly categorize 50 raw transactions."
+    grader: server.grader:grade
     aliases:
       - task_easy
       - categorize_transactions
@@ -16,6 +17,7 @@ tasks:
     name: Subscription Audit
     difficulty: medium
     description: "Identify and cancel duplicate or unused subscriptions."
+    grader: server.grader:grade
     aliases:
       - task_medium
       - cancel_subscriptions
@@ -23,6 +25,7 @@ tasks:
     name: Cash Flow Management
     difficulty: hard
     description: "Prevent overdraft by transferring funds before a large payment."
+    grader: server.grader:grade
     aliases:
       - task_hard
       - prevent_overdraft
