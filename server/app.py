@@ -49,9 +49,11 @@ app = create_app(
 )
 
 from typing import Any, List
-from fastapi import HTTPException
 
-from server.tasks import TASK_REGISTRY
+# Register tasks from the environment
+TASK_REGISTRY = {
+    task["task_id"]: task for task in FinanceOptimizerEnvironment.TASKS
+}
 
 @app.get("/tasks")
 def list_tasks() -> dict[str, List[dict[str, Any]]]:
