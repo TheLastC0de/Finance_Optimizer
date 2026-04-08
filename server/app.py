@@ -57,10 +57,8 @@ from fastapi import HTTPException
 
 try:
     from finance_optimizer.server.tasks import TASK_REGISTRY
-    from finance_optimizer.server.grader import grade
 except ModuleNotFoundError:
     from server.tasks import TASK_REGISTRY
-    from server.grader import grade
 
 @app.get("/tasks")
 def list_tasks() -> List[TaskInfo]:
@@ -99,8 +97,6 @@ async def get_grader_score():
         return {
             "task_id": task_id,
             "score": score,
-            "passed": 1 if score > 0.5 else 0,
-            "total": 1,
             "done": True,
         }
 

@@ -8,6 +8,9 @@ try:
 except ModuleNotFoundError:
     from models import FinanceOptimizerAction, FinanceOptimizerObservation
 
+import numpy as np
+from graders import ledger_grader, subscription_grader, cash_flow_grader
+
 class FinanceOptimizerEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
 
@@ -145,6 +148,9 @@ class FinanceOptimizerEnvironment(Environment):
         if self._state.step_count >= 100:
             done = True
             
+        # Clip and round reward like the sample repo
+        reward = round(float(np.clip(reward, -1.0, 1.0)), 4)
+        
         obs = self._get_obs(reward=reward, done=done)
         
         if done:
@@ -153,17 +159,26 @@ class FinanceOptimizerEnvironment(Environment):
         return obs
 
     def _compute_final_score(self) -> float:
-        try:
-            from finance_optimizer.server.grader import grade
-        except ImportError:
-            from server.grader import grade
-            
         task_id = self._state.task_id if hasattr(self._state, "task_id") else "ledger_cleanup"
         
-        # We can simulate the action dict based on our internal tracking if needed
-        # Or pass the environment state to the grader. For simplicity, we use our task scores.
-        score = self.task_scores.get(task_id, 0.0)
-        return float(max(0.001, min(0.999, score)))
+        if task_id == "ledger_cleanup":
+            # Count categorical matches
+            correct = sum(1 for tx in self.ledger if tx.get("category") in ["Transportation", "Groceries"])
+            return ledger_grader.grade(correct, 50)
+            
+        elif task_id == "subscription_audit":
+            # Count remaining unnecessary subs
+            unnecessary_remaining = sum(1 for sub in self.subscriptions if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90)
+            # Initial were 2 (Netflix_Duplicate and Gym)
+            cancelled = 2 - unnecessary_remaining
+            return subscription_grader.grade(cancelled, 2)
+            
+        elif task_id == "cash_flow":
+            # Improvement in balance vs baseline (starting 1200)
+            improvement = self.checking_balance - 1200.0
+            return cash_flow_grader.grade(improvement, 500.0) # Assume 500 is a good target
+            
+        return 0.001
 
     @property
     def state(self) -> State:

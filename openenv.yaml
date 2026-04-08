@@ -4,29 +4,45 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 8000
+version: "1.0.0"
+description: >
+  Personal Finance & Subscription Optimizer environment.
+  Helps users categorize bank ledgers, audit subscriptions, and manage cash flow.
+endpoints:
+  - /reset
+  - /step
+  - /state
+  - /tasks
+  - /grader
+  - /baseline
+  - /health
+  - /schema
+  - /ws
 tasks:
   - id: ledger_cleanup
-    name: Ledger Cleanup
     difficulty: easy
     description: "Correctly categorize 50 raw transactions."
-    grader: server.grader:grade
+    max_steps: 100
+    score_range: [0.0, 1.0]
+    grader: graders.ledger_grader:LedgerGrader
     aliases:
       - task_easy
       - categorize_transactions
   - id: subscription_audit
-    name: Subscription Audit
     difficulty: medium
     description: "Identify and cancel duplicate or unused subscriptions."
-    grader: server.grader:grade
+    max_steps: 100
+    score_range: [0.0, 1.0]
+    grader: graders.subscription_grader:SubscriptionGrader
     aliases:
       - task_medium
       - cancel_subscriptions
   - id: cash_flow
-    name: Cash Flow Management
     difficulty: hard
     description: "Prevent overdraft by transferring funds before a large payment."
-    grader: server.grader:grade
+    max_steps: 100
+    score_range: [0.0, 1.0]
+    grader: graders.cash_flow_grader:CashFlowGrader
     aliases:
       - task_hard
       - prevent_overdraft
-
