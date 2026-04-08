@@ -54,8 +54,9 @@ class FinanceOptimizerEnvironment(Environment):
             "cash_flow": 0.0
         }
 
-    def reset(self) -> FinanceOptimizerObservation:
+    def reset(self, seed: int | None = None, task_id: str | None = None) -> FinanceOptimizerObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
+        self._state.task_id = task_id or "ledger_cleanup"
         self.task_scores = {k: 0.0 for k in self.task_scores}
         
         self.ledger = []
