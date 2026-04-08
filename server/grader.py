@@ -19,13 +19,14 @@ def grade_cash_flow(net_balance_improvement: float, max_possible_improvement: fl
     return round(float(np.clip(score, 0.001, 0.999)), 4)
 
 class LedgerGrader:
-    def __call__(self, correct: int, total: int) -> float:
+    def __call__(self, correct: int = 0, total: int = 50, *args, **kwargs) -> float:
         return grade_ledger(correct, total)
 
 class SubscriptionGrader:
-    def __call__(self, cancelled: int, total: int) -> float:
+    def __call__(self, cancelled: int = 0, total: int = 2, *args, **kwargs) -> float:
         return grade_subscription(cancelled, total)
 
 class CashFlowGrader:
-    def __call__(self, improvement: float, max_improvement: float) -> float:
+    def __call__(self, improvement: float = 0.0, max_improvement: float = 500.0, *args, **kwargs) -> float:
         return grade_cash_flow(improvement, max_improvement)
+

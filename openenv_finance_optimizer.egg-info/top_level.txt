@@ -1,1 +1,4 @@
+client
+inference
+models
 server
