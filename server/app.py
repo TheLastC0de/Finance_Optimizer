@@ -63,6 +63,9 @@ def list_tasks() -> dict[str, List[dict[str, Any]]]:
             "id": task["task_id"],
             "difficulty": task["difficulty"],
             "description": task["description"],
+            "name": task.get("name", task["task_id"]),
+            "score_range": [0.0, 1.0],
+            "data_corpus": task.get("data_corpus", []),
             "max_steps": 100,
             "action_schema": FinanceOptimizerAction.model_json_schema()
         })
@@ -83,13 +86,13 @@ def _get_env() -> FinanceOptimizerEnvironment:
 async def get_grader_score():
     with _env_lock:
         env = _get_env()
-        score = env._compute_final_score()
-        task_id = env._state.task_id if hasattr(env._state, "task_id") else "ledger_cleanup"
+        score = env._compute_final_score() if getattr(env._state, "task_id", None) else 0.0
+        task_id = getattr(env._state, "task_id", "ledger_cleanup")
         
         return {
             "task_id": task_id,
             "score": score,
-            "done": True,
+            "done": getattr(env._state, "step_count", 0) > 0,
         }
 
 @app.get("/health")

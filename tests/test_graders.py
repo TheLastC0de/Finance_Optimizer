@@ -1,4 +1,4 @@
-from graders import LedgerGrader, SubscriptionGrader, CashFlowGrader
+from server.grader import LedgerGrader, SubscriptionGrader, CashFlowGrader
 
 ledger_grader = LedgerGrader()
 subscription_grader = SubscriptionGrader()

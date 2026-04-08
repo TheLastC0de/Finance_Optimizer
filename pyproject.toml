@@ -24,4 +24,4 @@ py-modules = ["models", "client", "inference"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["server*", "graders*"]
+include = ["server*"]

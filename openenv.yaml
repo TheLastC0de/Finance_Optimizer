@@ -31,7 +31,7 @@ tasks:
     description: "Correctly categorize 50 raw transactions."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.ledger_grader:LedgerGrader
+    grader: server.grader:LedgerGrader
     aliases:
       - task_easy
       - categorize_transactions
@@ -40,7 +40,7 @@ tasks:
     description: "Identify and cancel duplicate or unused subscriptions."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.subscription_grader:SubscriptionGrader
+    grader: server.grader:SubscriptionGrader
     aliases:
       - task_medium
       - cancel_subscriptions
@@ -49,7 +49,58 @@ tasks:
     description: "Prevent overdraft by transferring funds before a large payment."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.cash_flow_grader:CashFlowGrader
+    grader: server.grader:CashFlowGrader
     aliases:
       - task_hard
       - prevent_overdraft
+observation_space:
+  type: structured
+  fields:
+    - name: ledger
+      type: list[dict]
+      description: Transactions in the ledger
+    - name: subscriptions
+      type: list[dict]
+      description: Subscriptions the user has
+    - name: checking_balance
+      type: float
+      description: Checking balance
+    - name: savings_balance
+      type: float
+      description: Savings balance
+    - name: metadata
+      type: dict
+      description: Metadata about tasks
+    - name: done
+      type: bool
+      description: Done
+    - name: reward
+      type: float
+      description: Reward
+action_space:
+  type: structured
+  fields:
+    - name: action_type
+      type: str
+      description: The action type
+    - name: tx_id
+      type: str
+      description: Transaction ID
+    - name: category
+      type: str
+      description: Category
+    - name: vendor_name
+      type: str
+      description: Vendor name
+    - name: from_account
+      type: str
+      description: From account
+    - name: to_account
+      type: str
+      description: To account
+    - name: amount
+      type: float
+      description: Amount
+    - name: text
+      type: str
+      description: Text

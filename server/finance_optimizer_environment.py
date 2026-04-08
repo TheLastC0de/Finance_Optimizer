@@ -6,7 +6,7 @@ from openenv.core.env_server.types import State
 from models import FinanceOptimizerAction, FinanceOptimizerObservation
 
 import numpy as np
-from graders import LedgerGrader, SubscriptionGrader, CashFlowGrader
+from server.grader import LedgerGrader, SubscriptionGrader, CashFlowGrader
 
 # Initialize singletons for environment loop
 ledger_grader_inst = LedgerGrader()
