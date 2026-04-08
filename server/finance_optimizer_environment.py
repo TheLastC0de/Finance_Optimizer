@@ -145,7 +145,25 @@ class FinanceOptimizerEnvironment(Environment):
         if self._state.step_count >= 100:
             done = True
             
-        return self._get_obs(reward=reward, done=done)
+        obs = self._get_obs(reward=reward, done=done)
+        
+        if done:
+            obs.final_score = self._compute_final_score()
+            
+        return obs
+
+    def _compute_final_score(self) -> float:
+        try:
+            from finance_optimizer.server.grader import grade
+        except ImportError:
+            from server.grader import grade
+            
+        task_id = self._state.task_id if hasattr(self._state, "task_id") else "ledger_cleanup"
+        
+        # We can simulate the action dict based on our internal tracking if needed
+        # Or pass the environment state to the grader. For simplicity, we use our task scores.
+        score = self.task_scores.get(task_id, 0.0)
+        return float(max(0.001, min(0.999, score)))
 
     @property
     def state(self) -> State:

@@ -74,20 +74,35 @@ def list_tasks() -> List[TaskInfo]:
         for task in TASK_REGISTRY.values()
     ]
 
-@app.post("/grader")
-def get_grader_score(task_id: str, action: dict[str, Any]) -> dict[str, Any]:
-    if task_id not in TASK_REGISTRY:
-        raise HTTPException(status_code=404, detail=f"Unknown task_id: {task_id}")
-    
-    score = grade(action, task_id)
+import threading
+
+_env: FinanceOptimizerEnvironment | None = None
+_env_lock = threading.Lock()
+
+def _get_env() -> FinanceOptimizerEnvironment:
+    global _env
+    if _env is None:
+        _env = FinanceOptimizerEnvironment()
+    return _env
+
+@app.get("/grader")
+async def get_grader_score():
+    with _env_lock:
+        env = _get_env()
+        # Fallback completion check if is_complete is missing
+        if env._state.step_count == 0 and not env.task_scores.get("ledger_cleanup"):
+            return {"score": None, "message": "Episode not complete yet."}
+            
+        score = env._compute_final_score()
+        task_id = env._state.task_id if hasattr(env._state, "task_id") else "ledger_cleanup"
         
-    return {
-        "task_id": task_id,
-        "score": score,
-        "passed": 1 if score > 0.5 else 0,
-        "total": 1,
-        "metric": "finance_optimizer_alignment",
-    }
+        return {
+            "task_id": task_id,
+            "score": score,
+            "passed": 1 if score > 0.5 else 0,
+            "total": 1,
+            "done": True,
+        }
 
 
 
