@@ -303,7 +303,6 @@ class FinanceOptimizerEnvironment(Environment):
             "tasks": self.TASKS,
             "task_scores": self.task_scores,
             "step": self._state.step_count,
-            "vendor_categories": VENDOR_CATEGORIES,  # expose mapping to agents
         }
         return FinanceOptimizerObservation(
             ledger=self.ledger,
@@ -332,6 +331,10 @@ class FinanceOptimizerEnvironment(Environment):
             self.credit_score = max(300, self.credit_score - 1) # Punish carrying high debt
             
         self.savings_balance = round(self.savings_balance * (1 + 0.01 / 365.0), 2)
+
+        # ── Financial Habits Bonus (Smooth Reward Shaping) ──
+        if self.credit_score >= 750:
+            reward += 0.001
 
         # ── Adaptive Events (Dynamic Life Scenarios) ──
         event_message = None
