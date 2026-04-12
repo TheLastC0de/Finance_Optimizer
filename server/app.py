@@ -221,7 +221,7 @@ async def run_baseline():
 
 
 
-def main(host: str = "0.0.0.0", port: int = 8000):
+def main(host: str = "0.0.0.0", port: int = 7860):
     """
     Entry point for direct execution via uv run or python -m.
 
