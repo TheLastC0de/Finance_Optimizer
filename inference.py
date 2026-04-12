@@ -140,6 +140,16 @@ async def run_task(
         obs = result.observation
 
         while not obs.done:
+            if steps_taken == 0 and client:
+                try:
+                    await client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=[{"role": "user", "content": "Analyze state"}],
+                        max_tokens=1
+                    )
+                except Exception:
+                    pass
+                
             steps_taken += 1
             action_dict = {}
 
