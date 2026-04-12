@@ -139,94 +139,69 @@ async def run_task(
         result = await env.reset(seed=seed, task_id=task_name)
         obs = result.observation
 
+        import json
+        import re
+
         while not obs.done:
-            if steps_taken == 0 and client:
-                try:
-                    await client.chat.completions.create(
-                        model=MODEL_NAME,
-                        messages=[{"role": "user", "content": "Analyze state"}],
-                        max_tokens=1
-                    )
-                except Exception:
-                    pass
-                
             steps_taken += 1
             action_dict = {}
 
-            if task_name == "ledger_cleanup":
-                target_tx = next(
-                    (tx for tx in obs.ledger if tx["category"] == "Uncategorized"),
-                    None,
-                )
-                if target_tx:
-                    action_dict = {
-                        "action_type": "CategorizeTransaction",
-                        "tx_id": target_tx["id"],
-                    }
-                    if "UBER" in target_tx["vendor"]:
-                        action_dict["category"] = "Transportation"
+            system_prompt = f"""You are a Personal Finance Optimizer agent.
+Current Task: {task_name}
+Goal Instructions:
+- ledger_cleanup: Look for categorizable transactions (e.g. UBER/LYFT -> Transportation, SAFEWAY/WHOLEFOODS -> Groceries). Use CategorizeTransaction. If none, SetAlert text='done'.
+- subscription_audit: Cancel duplicate subscriptions or Gym memberships unused for 90+ days. Use CancelSubscription. If none, SetAlert text='done'.
+- cash_flow: If checking < 1500 and savings > 0, transfer enough to stay afloat. Use TransferFunds. If safe, SetAlert text='wait'.
+- fraud_categorization: Look for 'UNKNOWN INTL *RUSSIA' and categorize as Fraud.
+- savings_builder: If checking > 500, transfer excess to Savings. Use TransferFunds. If <= 500, SetAlert text='done'.
+- duplicate_charge_alert: If you see two identical AMZN/APPLE charges, SetAlert text='tx_dup_copy'.
+
+Action Schema:
+{{
+    "action_type": "<action_class>",
+    "tx_id": "<string>",
+    "category": "<string>",
+    "vendor_name": "<string>",
+    "from_account": "<Checking/Savings>",
+    "to_account": "<Checking/Savings>",
+    "amount": <float>,
+    "text": "<string>"
+}}
+
+Output exactly ONE valid JSON object and nothing else.
+
+Observation:
+Ledger: {obs.ledger}
+Subscriptions: {obs.subscriptions}
+Checking: {obs.checking_balance}
+Savings: {obs.savings_balance}
+"""
+            # Request action from LLM
+            if client:
+                try:
+                    response = await client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": "What is your next action? Respond ONLY with JSON, no wrappers."}
+                        ],
+                        max_tokens=256,
+                        temperature=0.1
+                    )
+                    raw_text = response.choices[0].message.content or "{}"
+                    
+                    # Parse JSON safely
+                    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                    if match:
+                        action_dict = json.loads(match.group(0))
                     else:
-                        action_dict["category"] = "Groceries"
-                else:
-                    action_dict = {"action_type": "SetAlert", "text": "done"}
+                        action_dict = json.loads(raw_text)
+                except Exception as e:
+                    print(f"[DEBUG] LLM Parsing Error: {e}", file=sys.stderr, flush=True)
 
-            elif task_name == "subscription_audit":
-                target_sub = next(
-                    (
-                        sub
-                        for sub in obs.subscriptions
-                        if sub.get("duplicate")
-                        or sub.get("last_visit_days_ago", 0) >= 90
-                    ),
-                    None,
-                )
-                if target_sub:
-                    action_dict = {
-                        "action_type": "CancelSubscription",
-                        "vendor_name": target_sub["vendor_name"],
-                    }
-                else:
-                    action_dict = {"action_type": "SetAlert", "text": "done"}
-
-            elif task_name == "cash_flow":
-                if obs.checking_balance < 1500 and obs.savings_balance > 0:
-                    action_dict = {
-                        "action_type": "TransferFunds",
-                        "from_account": "Savings",
-                        "to_account": "Checking",
-                        "amount": 500.0,
-                    }
-                else:
-                    action_dict = {"action_type": "SetAlert", "text": "wait"}
-
-            elif task_name == "fraud_categorization":
-                target_fraud = next(
-                    (tx for tx in obs.ledger if tx["vendor"] == "UNKNOWN INTL *RUSSIA" and tx["category"] != "Fraud"),
-                    None,
-                )
-                if target_fraud:
-                    action_dict = {
-                        "action_type": "CategorizeTransaction",
-                        "tx_id": target_fraud["id"],
-                        "category": "Fraud",
-                    }
-                else:
-                    action_dict = {"action_type": "SetAlert", "text": "done"}
-
-            elif task_name == "savings_builder":
-                if obs.checking_balance > 500:
-                    excess = obs.checking_balance - 500
-                    action_dict = {
-                        "action_type": "TransferFunds",
-                        "from_account": "Checking",
-                        "to_account": "Savings",
-                        "amount": excess,
-                    }
-                else:
-                    action_dict = {"action_type": "SetAlert", "text": "done"}
-
-            elif task_name == "duplicate_charge_alert":
-                action_dict = {"action_type": "SetAlert", "text": "tx_dup_copy"}
+            # Fallback to avoid breaking platform logic if LLM completely hallucinates
+            if not action_dict or "action_type" not in action_dict:
+                action_dict = {"action_type": "SetAlert", "text": "done"}
 
             action = FinanceOptimizerAction(**action_dict)
             action_str_repr = f"{action.action_type}"

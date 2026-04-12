@@ -97,39 +97,49 @@ class FinanceOptimizerEnvironment(Environment):
         self._state.task_id = task_id or "ledger_cleanup"
         self.task_scores = {k: 0.0 for k in self.task_scores}
         
+        rng = np.random.RandomState(seed if seed is not None else int(uuid4().int % 2**32))
+        
         self.ledger = []
-        for i in range(25):
-            self.ledger.append({"id": f"tx_{i}", "vendor": "UBER *TRIP", "amount": -15.0, "category": "Uncategorized"})
-            self.ledger.append({"id": f"tx_{i+25}", "vendor": "SAFEWAY #33", "amount": -45.0, "category": "Uncategorized"})
+        vendors_transport = ["UBER *TRIP", "LYFT *RIDE", "BART *TRANSIT", "LIME *SCOOTER"]
+        vendors_groceries = ["SAFEWAY #33", "WHOLEFOODS", "TRADER JOE", "TARGET *GROC"]
+        
+        # Base realistic ledger
+        for i in range(50):
+            if rng.rand() > 0.5:
+                vendor = rng.choice(vendors_transport)
+                amount = -round(float(rng.uniform(5.0, 35.0)), 2)
+            else:
+                vendor = rng.choice(vendors_groceries)
+                amount = -round(float(rng.uniform(20.0, 150.0)), 2)
+            self.ledger.append({"id": f"tx_{i}", "vendor": vendor, "amount": amount, "category": "Uncategorized"})
             
         self.subscriptions = [
             {"vendor_name": "Netflix_Primary", "cost": 15.99, "type": "streaming", "duplicate": False},
             {"vendor_name": "Netflix_Duplicate", "cost": 15.99, "type": "streaming", "duplicate": True},
-            {"vendor_name": "Gym", "cost": 50.0, "type": "gym", "last_visit_days_ago": 90},
-            {"vendor_name": "Rent", "cost": 1500.0, "type": "housing", "due_in_days": 7}
+            {"vendor_name": "Gym", "cost": float(rng.choice([50.0, 75.0, 100.0])), "type": "gym", "last_visit_days_ago": int(rng.uniform(60, 120))},
+            {"vendor_name": "Rent", "cost": float(rng.choice([1500.0, 1800.0, 2000.0])), "type": "housing", "due_in_days": int(rng.uniform(3, 10))}
         ]
         
-        self.checking_balance = 1200.0
-        self.savings_balance = 1000.0
+        self.checking_balance = round(float(rng.uniform(800.0, 1500.0)), 2)
+        self.savings_balance = round(float(rng.uniform(500.0, 3000.0)), 2)
         self.days_passed = 0
         self.original_excess = 0.0
         self.is_done = False
 
-        # Inject task-specific state
+        # Inject task-specific state invariants
         if self._state.task_id == "fraud_categorization":
-            # Add an anomalous transaction
-            self.ledger.append({"id": "tx_fraud_99", "vendor": "UNKNOWN INTL *RUSSIA", "amount": -5000.0, "category": "Uncategorized"})
+            self.ledger.append({"id": "tx_fraud_99", "vendor": "UNKNOWN INTL *RUSSIA", "amount": -round(float(rng.uniform(3000.0, 8000.0)), 2), "category": "Uncategorized"})
             
         elif self._state.task_id == "savings_builder":
-            # High idle balance, target checking is 500
-            self.checking_balance = 2500.0
+            self.checking_balance = round(float(rng.uniform(2000.0, 4000.0)), 2)
             self.savings_balance = 0.0
-            self.original_excess = 2500.0 - 500.0
+            self.original_excess = self.checking_balance - 500.0
 
         elif self._state.task_id == "duplicate_charge_alert":
-            # Add a duplicate charge next to a previous one
-            self.ledger.append({"id": "tx_dup_orig", "vendor": "AMAZON.COM", "amount": -100.0, "category": "Uncategorized"})
-            self.ledger.append({"id": "tx_dup_copy", "vendor": "AMAZON.COM", "amount": -100.0, "category": "Uncategorized"})
+            dup_vendor = rng.choice(["AMAZON.COM", "APPLE.COM", "STEAM GAMES"])
+            dup_amount = -round(float(rng.uniform(50.0, 200.0)), 2)
+            self.ledger.append({"id": "tx_dup_orig", "vendor": dup_vendor, "amount": dup_amount, "category": "Uncategorized"})
+            self.ledger.append({"id": "tx_dup_copy", "vendor": dup_vendor, "amount": dup_amount, "category": "Uncategorized"})
             
         return self._get_obs(reward=0.0)
 
