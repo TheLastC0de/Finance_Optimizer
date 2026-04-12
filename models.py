@@ -1,10 +1,30 @@
+"""
+Data models for the Finance Optimizer Environment.
+
+The finance optimizer environment helps users categorize bank ledgers,
+audit subscriptions, and manage cash flow through three progressive tasks.
+"""
+
 from typing import Any, Dict, List, Literal, Optional
 
 from openenv.core.env_server.types import Action, Observation
-from pydantic import Field, BaseModel
+from pydantic import Field
 
 
 class FinanceOptimizerAction(Action):
+    """Action for the Finance Optimizer environment.
+
+    Attributes:
+        action_type: Type of action to perform.
+        tx_id: Transaction ID for CategorizeTransaction.
+        category: Category for CategorizeTransaction.
+        vendor_name: Vendor name for CancelSubscription.
+        from_account: Source account for TransferFunds.
+        to_account: Destination account for TransferFunds.
+        amount: Amount to transfer for TransferFunds.
+        text: Text for SetAlert.
+    """
+
     action_type: Literal["CategorizeTransaction", "CancelSubscription", "TransferFunds", "SetAlert"] = Field(
         ..., description="Type of action to perform"
     )
@@ -15,13 +35,25 @@ class FinanceOptimizerAction(Action):
     to_account: Optional[str] = Field(None, description="Destination account for TransferFunds")
     amount: Optional[float] = Field(None, description="Amount to transfer for TransferFunds")
     text: Optional[str] = Field(None, description="Text for SetAlert")
-    model_config = {"extra": "allow"}
 
 
 class FinanceOptimizerObservation(Observation):
+    """Observation from the Finance Optimizer environment.
+
+    Contains account state, transaction history, and episode metrics.
+
+    Attributes:
+        ledger: Last 60 days of transactions.
+        subscriptions: Active recurring subscriptions.
+        checking_balance: Checking account balance.
+        savings_balance: Savings account balance.
+        metadata: Task progress and scores.
+        final_score: Final grader score in [0, 1]; only set at episode end.
+    """
+
     ledger: List[Dict[str, Any]] = Field(default_factory=list, description="Last 60 days of transactions")
     subscriptions: List[Dict[str, Any]] = Field(default_factory=list, description="Active recurring subscriptions")
     checking_balance: float = Field(default=0.0, description="Checking account balance")
     savings_balance: float = Field(default=0.0, description="Savings account balance")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Task progress and scores")
-    model_config = {"extra": "allow"}
+    final_score: Optional[float] = None

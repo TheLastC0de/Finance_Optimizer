@@ -14,6 +14,7 @@ dependencies = [
     "numpy>=1.26.0",
     "pydantic>=2.6.0",
     "uvicorn>=0.27.0",
+    "openai>=1.0.0",
 ]
 
 [project.scripts]
@@ -24,4 +25,4 @@ py-modules = ["models", "client", "inference"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["server*"]
+include = ["server*", "graders*"]
