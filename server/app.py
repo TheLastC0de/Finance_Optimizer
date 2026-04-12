@@ -92,7 +92,7 @@ async def get_grader_score():
         return {
             "task_id": task_id,
             "score": score,
-            "done": getattr(env._state, "step_count", 0) > 0,
+            "done": getattr(env, "is_done", False),
         }
 
 @app.get("/health")

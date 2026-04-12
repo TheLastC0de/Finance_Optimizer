@@ -113,6 +113,7 @@ class FinanceOptimizerEnvironment(Environment):
         self.savings_balance = 1000.0
         self.days_passed = 0
         self.original_excess = 0.0
+        self.is_done = False
 
         # Inject task-specific state
         if self._state.task_id == "fraud_categorization":
@@ -248,6 +249,7 @@ class FinanceOptimizerEnvironment(Environment):
         
         if done:
             obs.final_score = self._compute_final_score()
+            self.is_done = True
             
         return obs
 
