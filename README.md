@@ -15,12 +15,6 @@ tags:
 
 A high-fidelity, multi-task reinforcement learning environment for strategic personal finance management. Built to evaluate the reasoning limits of frontier agents.
 
-## Hackathon Elite Status
-This environment is optimized for OpenEnv Hackathon 2026 with a focus on:
-- Real-World Utility: Simulates 5 categories, 22% APR debt, and a dynamic FICO Credit Score.
-- Constraint Satisfaction: Hard tasks (Debt Avalanche) require balancing repayment with a mandatory $500 safety buffer.
-- Dense Reward Shaping: Rewards are multi-objective; agents must prioritize task targets while maintaining financial stability.
-
 ## Architecture
 
 ```mermaid
