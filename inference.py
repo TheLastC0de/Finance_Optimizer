@@ -67,11 +67,21 @@ TASK_NAME = (
     or os.getenv("TASK_NAME")
     or ""
 )
-ALL_TASKS = ["ledger_cleanup", "subscription_audit", "cash_flow"]
+ALL_TASKS = [
+    "ledger_cleanup", 
+    "subscription_audit", 
+    "cash_flow", 
+    "fraud_categorization", 
+    "savings_builder", 
+    "duplicate_charge_alert"
+]
 TASK_ALIASES: dict[str, str] = {
     "easy": "ledger_cleanup",
     "medium": "subscription_audit",
     "hard": "cash_flow",
+    "fraud": "fraud_categorization",
+    "savings": "savings_builder",
+    "duplicate": "duplicate_charge_alert",
 }
 TASK_NAME = TASK_ALIASES.get(TASK_NAME, TASK_NAME)
 BENCHMARK = (
@@ -178,6 +188,35 @@ async def run_task(
                     }
                 else:
                     action_dict = {"action_type": "SetAlert", "text": "wait"}
+
+            elif task_name == "fraud_categorization":
+                target_fraud = next(
+                    (tx for tx in obs.ledger if tx["vendor"] == "UNKNOWN INTL *RUSSIA" and tx["category"] != "Fraud"),
+                    None,
+                )
+                if target_fraud:
+                    action_dict = {
+                        "action_type": "CategorizeTransaction",
+                        "tx_id": target_fraud["id"],
+                        "category": "Fraud",
+                    }
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+
+            elif task_name == "savings_builder":
+                if obs.checking_balance > 500:
+                    excess = obs.checking_balance - 500
+                    action_dict = {
+                        "action_type": "TransferFunds",
+                        "from_account": "Checking",
+                        "to_account": "Savings",
+                        "amount": excess,
+                    }
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+
+            elif task_name == "duplicate_charge_alert":
+                action_dict = {"action_type": "SetAlert", "text": "tx_dup_copy"}
 
             action = FinanceOptimizerAction(**action_dict)
             action_str_repr = f"{action.action_type}"

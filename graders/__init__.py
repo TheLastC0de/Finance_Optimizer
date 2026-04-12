@@ -1,5 +1,17 @@
-from graders.ledger_grader import LedgerGrader
-from graders.subscription_grader import SubscriptionGrader
-from graders.cash_flow_grader import CashFlowGrader
+from graders.all_graders import (
+    LedgerGrader,
+    SubscriptionGrader,
+    CashFlowGrader,
+    FraudGrader,
+    SavingsGrader,
+    DuplicateGrader
+)
 
-__all__ = ["LedgerGrader", "SubscriptionGrader", "CashFlowGrader"]
+__all__ = [
+    "LedgerGrader", 
+    "SubscriptionGrader", 
+    "CashFlowGrader",
+    "FraudGrader",
+    "SavingsGrader",
+    "DuplicateGrader"
+]

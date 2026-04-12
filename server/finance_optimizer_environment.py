@@ -6,14 +6,22 @@ from openenv.core.env_server.types import State
 from models import FinanceOptimizerAction, FinanceOptimizerObservation
 
 import numpy as np
-from graders.ledger_grader import LedgerGrader
-from graders.subscription_grader import SubscriptionGrader
-from graders.cash_flow_grader import CashFlowGrader
+from graders.all_graders import (
+    LedgerGrader,
+    SubscriptionGrader,
+    CashFlowGrader,
+    FraudGrader,
+    SavingsGrader,
+    DuplicateGrader
+)
 
 # Initialize singletons for environment loop
 ledger_grader_inst = LedgerGrader()
 subscription_grader_inst = SubscriptionGrader()
 cash_flow_grader_inst = CashFlowGrader()
+fraud_grader_inst = FraudGrader()
+savings_grader_inst = SavingsGrader()
+duplicate_grader_inst = DuplicateGrader()
 
 class FinanceOptimizerEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
@@ -42,6 +50,30 @@ class FinanceOptimizerEnvironment(Environment):
             "description": "Prevent overdraft by transferring funds before a large payment.",
             "data_corpus": [],
             "aliases": ["task_hard", "prevent_overdraft"]
+        },
+        {
+            "task_id": "fraud_categorization",
+            "name": "Fraud Categorization",
+            "difficulty": "medium",
+            "description": "Identify and categorize a highly anomalous transaction as Fraud.",
+            "data_corpus": [],
+            "aliases": ["task_fraud", "flag_fraud"]
+        },
+        {
+            "task_id": "savings_builder",
+            "name": "Savings Builder",
+            "difficulty": "hard",
+            "description": "Move idle cash to savings, maintaining exactly a minimum balance in checking.",
+            "data_corpus": [],
+            "aliases": ["task_savings", "build_savings"]
+        },
+        {
+            "task_id": "duplicate_charge_alert",
+            "name": "Duplicate Charge Alert",
+            "difficulty": "hard",
+            "description": "Identify a duplicated charge in the ledger and alert the system with its transaction ID.",
+            "data_corpus": [],
+            "aliases": ["task_duplicate", "alert_duplicate"]
         }
     ]
 
@@ -55,8 +87,12 @@ class FinanceOptimizerEnvironment(Environment):
         self.task_scores = {
             "ledger_cleanup": 0.0,
             "subscription_audit": 0.0,
-            "cash_flow": 0.0
+            "cash_flow": 0.0,
+            "fraud_categorization": 0.0,
+            "savings_builder": 0.0,
+            "duplicate_charge_alert": 0.0
         }
+        self.original_excess = 0.0
 
     def reset(self, seed: int | None = None, task_id: str | None = None, **kwargs) -> FinanceOptimizerObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
@@ -78,7 +114,24 @@ class FinanceOptimizerEnvironment(Environment):
         self.checking_balance = 1200.0
         self.savings_balance = 1000.0
         self.days_passed = 0
-        
+        self.original_excess = 0.0
+
+        # Inject task-specific state
+        if self._state.task_id == "fraud_categorization":
+            # Add an anomalous transaction
+            self.ledger.append({"id": "tx_fraud_99", "vendor": "UNKNOWN INTL *RUSSIA", "amount": -5000.0, "category": "Uncategorized"})
+            
+        elif self._state.task_id == "savings_builder":
+            # High idle balance, target checking is 500
+            self.checking_balance = 2500.0
+            self.savings_balance = 0.0
+            self.original_excess = 2500.0 - 500.0
+
+        elif self._state.task_id == "duplicate_charge_alert":
+            # Add a duplicate charge next to a previous one
+            self.ledger.append({"id": "tx_dup_orig", "vendor": "AMAZON.COM", "amount": -100.0, "category": "Uncategorized"})
+            self.ledger.append({"id": "tx_dup_copy", "vendor": "AMAZON.COM", "amount": -100.0, "category": "Uncategorized"})
+            
         return self._get_obs(reward=0.0)
 
     def _get_obs(self, reward: float = 0.0, done: bool = False):
@@ -116,6 +169,14 @@ class FinanceOptimizerEnvironment(Environment):
                             tx["category"] = "Groceries"
                             reward += 0.1
                             self.task_scores["ledger_cleanup"] = min(1.0, self.task_scores["ledger_cleanup"] + 0.02)
+                    elif tx["vendor"] == "UNKNOWN INTL *RUSSIA" and action.category == "Fraud":
+                        if tx["category"] != "Fraud":
+                            tx["category"] = "Fraud"
+                            reward += 1.0
+                            self.task_scores["fraud_categorization"] = 1.0
+                            if task_id == "fraud_categorization":
+                                done = True
+
             # Check if all transactions categorized
             if task_id == "ledger_cleanup":
                 uncategorized = sum(1 for tx in self.ledger if tx["category"] == "Uncategorized")
@@ -146,9 +207,19 @@ class FinanceOptimizerEnvironment(Environment):
                 if self.savings_balance >= amt > 0:
                     self.savings_balance -= amt
                     self.checking_balance += amt
+            elif action.from_account == "Checking" and action.to_account == "Savings":
+                if self.checking_balance >= amt > 0:
+                    self.checking_balance -= amt
+                    self.savings_balance += amt
+                    if task_id == "savings_builder":
+                        reward += 0.5
 
         elif action.action_type == "SetAlert":
             if action.text == "done":
+                done = True
+            elif action.text == "tx_dup_copy" and task_id == "duplicate_charge_alert":
+                reward += 1.0
+                self.task_scores["duplicate_charge_alert"] = 1.0
                 done = True
 
         self.days_passed += 1
@@ -197,6 +268,17 @@ class FinanceOptimizerEnvironment(Environment):
         elif task_id == "cash_flow":
             # Score based on whether overdraft was avoided (task_score=1.0) or not (0.0)
             return cash_flow_grader_inst(self.task_scores["cash_flow"], 1.0)
+            
+        elif task_id == "fraud_categorization":
+            fraud_identified = self.task_scores["fraud_categorization"] == 1.0
+            return fraud_grader_inst(fraud_identified)
+
+        elif task_id == "savings_builder":
+            return savings_grader_inst(self.checking_balance, 500.0, self.original_excess)
+
+        elif task_id == "duplicate_charge_alert":
+            alert_set = self.task_scores["duplicate_charge_alert"] == 1.0
+            return duplicate_grader_inst(alert_set)
             
         return 0.001
 
