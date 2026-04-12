@@ -101,13 +101,122 @@ async def health():
 
 @app.post("/baseline")
 async def run_baseline():
-    """Dummy baseline for validation."""
+    """Run baseline heuristic agent against all tasks and return scores."""
+    task_ids = [t["task_id"] for t in FinanceOptimizerEnvironment.TASKS]
+    results = []
+    
+    for task_id in task_ids:
+        with _env_lock:
+            env = _get_env()
+            obs = env.reset(seed=42, task_id=task_id)
+
+        score = 0.0
+        steps = 0
+
+        while not obs.done:
+            steps += 1
+            action_dict = {}
+
+            if task_id == "ledger_cleanup":
+                target_tx = next(
+                    (tx for tx in obs.ledger if tx["category"] == "Uncategorized"),
+                    None,
+                )
+                if target_tx:
+                    action_dict = {
+                        "action_type": "CategorizeTransaction",
+                        "tx_id": target_tx["id"],
+                    }
+                    if "UBER" in target_tx["vendor"]:
+                        action_dict["category"] = "Transportation"
+                    else:
+                        action_dict["category"] = "Groceries"
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+
+            elif task_id == "subscription_audit":
+                target_sub = next(
+                    (
+                        sub
+                        for sub in obs.subscriptions
+                        if sub.get("duplicate")
+                        or sub.get("last_visit_days_ago", 0) >= 90
+                    ),
+                    None,
+                )
+                if target_sub:
+                    action_dict = {
+                        "action_type": "CancelSubscription",
+                        "vendor_name": target_sub["vendor_name"],
+                    }
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+
+            elif task_id == "cash_flow":
+                if obs.checking_balance < 1500 and obs.savings_balance > 0:
+                    action_dict = {
+                        "action_type": "TransferFunds",
+                        "from_account": "Savings",
+                        "to_account": "Checking",
+                        "amount": 500.0,
+                    }
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "wait"}
+
+            elif task_id == "fraud_categorization":
+                target_fraud = next(
+                    (tx for tx in obs.ledger if tx["vendor"] == "UNKNOWN INTL *RUSSIA" and tx["category"] != "Fraud"),
+                    None,
+                )
+                if target_fraud:
+                    action_dict = {
+                        "action_type": "CategorizeTransaction",
+                        "tx_id": target_fraud["id"],
+                        "category": "Fraud",
+                    }
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+
+            elif task_id == "savings_builder":
+                if obs.checking_balance > 500:
+                    excess = obs.checking_balance - 500
+                    action_dict = {
+                        "action_type": "TransferFunds",
+                        "from_account": "Checking",
+                        "to_account": "Savings",
+                        "amount": excess,
+                    }
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+
+            elif task_id == "duplicate_charge_alert":
+                action_dict = {"action_type": "SetAlert", "text": "tx_dup_copy"}
+
+            action = FinanceOptimizerAction(**action_dict)
+
+            with _env_lock:
+                obs = env.step(action)
+
+            if obs.done and obs.final_score is not None:
+                score = obs.final_score
+
+        results.append(
+            {
+                "task_id": task_id,
+                "score": round(score, 4),
+                "resolved": score >= 0.5,
+                "steps": steps,
+            }
+        )
+
+    total = sum(r["score"] for r in results)
+    resolved_count = sum(1 for r in results if r["resolved"])
     return {
-        "results": [
-            {"task_id": "ledger_cleanup", "score": 0.5},
-            {"task_id": "subscription_audit", "score": 0.5},
-            {"task_id": "cash_flow", "score": 0.5}
-        ]
+        "model": "heuristic",
+        "results": results,
+        "total_score": round(total, 3),
+        "average_score": round(total / len(results), 3) if results else 0.0,
+        "resolved": f"{resolved_count}/{len(results)}",
     }
 
 
