@@ -31,7 +31,7 @@ tasks:
     description: "Correctly categorize 50 raw transactions."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.all_graders:LedgerGrader
+    grader: graders.ledger_grader:LedgerGrader
     aliases:
       - task_easy
       - categorize_transactions
@@ -40,7 +40,7 @@ tasks:
     description: "Identify and cancel duplicate or unused subscriptions."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.all_graders:SubscriptionGrader
+    grader: graders.subscription_grader:SubscriptionGrader
     aliases:
       - task_medium
       - cancel_subscriptions
@@ -49,7 +49,7 @@ tasks:
     description: "Prevent overdraft by transferring funds before a large payment."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.all_graders:CashFlowGrader
+    grader: graders.cash_flow_grader:CashFlowGrader
     aliases:
       - task_hard
       - prevent_overdraft
@@ -58,19 +58,19 @@ tasks:
     description: "Identify and categorize a highly anomalous transaction as Fraud."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.all_graders:FraudGrader
+    grader: graders.fraud_grader:FraudGrader
   - id: savings_builder
     difficulty: hard
     description: "Move idle cash to savings, maintaining exactly a minimum balance in checking."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.all_graders:SavingsGrader
+    grader: graders.savings_grader:SavingsGrader
   - id: duplicate_charge_alert
     difficulty: hard
     description: "Identify a duplicated charge in the ledger and alert the system with its transaction ID."
     max_steps: 100
     score_range: [0.0, 1.0]
-    grader: graders.all_graders:DuplicateGrader
+    grader: graders.duplicate_grader:DuplicateGrader
 observation_space:
   type: structured
   fields:
