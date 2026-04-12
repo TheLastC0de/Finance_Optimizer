@@ -1,6 +1,6 @@
 ---
 title: Finance Optimizer Environment Server
-emoji: $
+emoji: 💵
 colorFrom: purple
 colorTo: blue
 sdk: docker
