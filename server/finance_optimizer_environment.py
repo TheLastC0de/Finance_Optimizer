@@ -3,10 +3,10 @@ from uuid import uuid4
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
-from models import FinanceOptimizerAction, FinanceOptimizerObservation
+from finance_optimizer.models import FinanceOptimizerAction, FinanceOptimizerObservation
 
 import numpy as np
-from server.grader import LedgerGrader, SubscriptionGrader, CashFlowGrader
+from finance_optimizer.server.grader import LedgerGrader, SubscriptionGrader, CashFlowGrader
 
 # Initialize singletons for environment loop
 ledger_grader_inst = LedgerGrader()
@@ -120,6 +120,8 @@ class FinanceOptimizerEnvironment(Environment):
                     if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90:
                         reward += 0.5
                         self.task_scores["subscription_audit"] = min(1.0, self.task_scores["subscription_audit"] + 0.5)
+                    else:
+                        new_subs.append(sub)  # Keep valid subscriptions
                 else:
                     new_subs.append(sub)
             self.subscriptions = new_subs

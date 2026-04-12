@@ -35,8 +35,8 @@ except Exception as e:  # pragma: no cover
         "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
     ) from e
 
-from models import FinanceOptimizerAction, FinanceOptimizerObservation
-from server.finance_optimizer_environment import FinanceOptimizerEnvironment
+from finance_optimizer.models import FinanceOptimizerAction, FinanceOptimizerObservation
+from finance_optimizer.server.finance_optimizer_environment import FinanceOptimizerEnvironment
 
 
 # Create the app with web interface and README integration

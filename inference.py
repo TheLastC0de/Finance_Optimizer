@@ -1,20 +1,11 @@
-import argparse
 import asyncio
 import os
 import sys
 from typing import Any, List, Optional
 
-try:
-    from openai import AsyncOpenAI
-except ImportError:
-    AsyncOpenAI = None
+from finance_optimizer.client import FinanceOptimizerEnv
+from finance_optimizer.models import FinanceOptimizerAction
 
-from client import FinanceOptimizerEnv
-from models import FinanceOptimizerAction
-
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
-HF_TOKEN = os.getenv("HF_TOKEN")
 ENV_URL = os.getenv("ENV_URL", "http://localhost:8000")
 TASK_NAME = os.getenv("TASK_NAME", "")
 ALL_TASKS = ["ledger_cleanup", "subscription_audit", "cash_flow"]
@@ -31,13 +22,13 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
     rewards_str = ",".join(f"{float(r):.2f}" for r in rewards)
     print(f"[END] success={str(success).lower()} steps={steps} score={float(score):.2f} rewards={rewards_str}", flush=True)
 
-async def run_task(task_name: str, client: AsyncOpenAI, env: FinanceOptimizerEnv, seed: int) -> None:
+async def run_task(task_name: str, env: FinanceOptimizerEnv, seed: int) -> None:
     rewards: List[float] = []
     steps_taken = 0
     score = 0.0
     success = False
     
-    log_start(task=task_name, env="finance_optimizer", model=MODEL_NAME)
+    log_start(task=task_name, env="finance_optimizer", model="rule-based")
     
     try:
         result = await env.reset(seed=seed, task_id=task_name)
@@ -56,14 +47,14 @@ async def run_task(task_name: str, client: AsyncOpenAI, env: FinanceOptimizerEnv
                     else:
                         action_dict["category"] = "Groceries"
                 else:
-                    action_dict = {"action_type": "SetAlert", "text": "done"}
+                    break  # All transactions categorized, exit early
                     
             elif task_name == "subscription_audit":
                 target_sub = next((sub for sub in obs.subscriptions if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90), None)
                 if target_sub:
                     action_dict = {"action_type": "CancelSubscription", "vendor_name": target_sub["vendor_name"]}
                 else:
-                    action_dict = {"action_type": "SetAlert", "text": "done"}
+                    break  # All unnecessary subs cancelled, exit early
                     
             elif task_name == "cash_flow":
                 if obs.checking_balance < 1500 and obs.savings_balance > 0:
@@ -82,11 +73,12 @@ async def run_task(task_name: str, client: AsyncOpenAI, env: FinanceOptimizerEnv
                 break
                 
             obs = result.observation
-            reward = float(obs.reward or 0.0)
+            reward = float(obs.reward) if obs.reward is not None else 0.0
             rewards.append(reward)
             
-            if obs.done and getattr(obs, "final_score", None) is not None:
-                score = obs.final_score
+            final = getattr(obs, "final_score", None)
+            if obs.done and final is not None:
+                score = float(final)
                 
             log_step(steps_taken, action_str_repr, reward, obs.done, None)
             
@@ -94,7 +86,8 @@ async def run_task(task_name: str, client: AsyncOpenAI, env: FinanceOptimizerEnv
             if steps_taken > 50:
                 break
                 
-        score = round(min(max(score, 0.01), 0.99), 2)
+        if score > 0.0:
+            score = round(min(max(score, 0.01), 0.99), 2)
         success = score >= 0.5
         
     except Exception as exc:
@@ -106,14 +99,12 @@ async def run_task(task_name: str, client: AsyncOpenAI, env: FinanceOptimizerEnv
 async def main():
     tasks_to_run = [TASK_NAME] if TASK_NAME else ALL_TASKS
     
-    client = AsyncOpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN) if AsyncOpenAI and HF_TOKEN else None
-    
     env = FinanceOptimizerEnv(base_url=ENV_URL)
     
     try:
         await env.connect()
         for i, task_name in enumerate(tasks_to_run):
-            await run_task(task_name, client, env, seed=42 + i)
+            await run_task(task_name, env, seed=42 + i)
     finally:
         try:
             await env.close()
