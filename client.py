@@ -77,6 +77,10 @@ class FinanceOptimizerEnv(
             reward=payload.get("reward", 0.0),
         )
 
+        # Pass through final_score if present
+        if "final_score" in obs_data:
+            observation.final_score = obs_data["final_score"]
+
         return StepResult(
             observation=observation,
             reward=payload.get("reward", 0.0),

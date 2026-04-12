@@ -47,14 +47,14 @@ async def run_task(task_name: str, env: FinanceOptimizerEnv, seed: int) -> None:
                     else:
                         action_dict["category"] = "Groceries"
                 else:
-                    break  # All transactions categorized, exit early
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
                     
             elif task_name == "subscription_audit":
                 target_sub = next((sub for sub in obs.subscriptions if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90), None)
                 if target_sub:
                     action_dict = {"action_type": "CancelSubscription", "vendor_name": target_sub["vendor_name"]}
                 else:
-                    break  # All unnecessary subs cancelled, exit early
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
                     
             elif task_name == "cash_flow":
                 if obs.checking_balance < 1500 and obs.savings_balance > 0:
@@ -82,8 +82,7 @@ async def run_task(task_name: str, env: FinanceOptimizerEnv, seed: int) -> None:
                 
             log_step(steps_taken, action_str_repr, reward, obs.done, None)
             
-            # Simple early stopping if stuck
-            if steps_taken > 50:
+            if steps_taken > 100:
                 break
                 
         if score > 0.0:

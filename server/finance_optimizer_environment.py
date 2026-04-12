@@ -98,6 +98,8 @@ class FinanceOptimizerEnvironment(Environment):
     def step(self, action: FinanceOptimizerAction) -> FinanceOptimizerObservation:
         self._state.step_count += 1
         reward = 0.0
+        done = False
+        task_id = getattr(self._state, "task_id", "ledger_cleanup")
         
         if action.action_type == "CategorizeTransaction":
             for tx in self.ledger:
@@ -112,6 +114,11 @@ class FinanceOptimizerEnvironment(Environment):
                             tx["category"] = "Groceries"
                             reward += 0.1
                             self.task_scores["ledger_cleanup"] = min(1.0, self.task_scores["ledger_cleanup"] + 0.02)
+            # Check if all transactions categorized
+            if task_id == "ledger_cleanup":
+                uncategorized = sum(1 for tx in self.ledger if tx["category"] == "Uncategorized")
+                if uncategorized == 0:
+                    done = True
                             
         elif action.action_type == "CancelSubscription":
             new_subs = []
@@ -125,6 +132,11 @@ class FinanceOptimizerEnvironment(Environment):
                 else:
                     new_subs.append(sub)
             self.subscriptions = new_subs
+            # Check if all unnecessary subs cancelled
+            if task_id == "subscription_audit":
+                unnecessary = sum(1 for s in self.subscriptions if s.get("duplicate") or s.get("last_visit_days_ago", 0) >= 90)
+                if unnecessary == 0:
+                    done = True
             
         elif action.action_type == "TransferFunds":
             amt = action.amount or 0.0
@@ -133,22 +145,27 @@ class FinanceOptimizerEnvironment(Environment):
                     self.savings_balance -= amt
                     self.checking_balance += amt
 
+        elif action.action_type == "SetAlert":
+            if action.text == "done":
+                done = True
+
         self.days_passed += 1
-        done = False
         
-        # Grader for Task 3: Cash Flow
-        for sub in self.subscriptions:
-            if sub.get("due_in_days") is not None:
-                if sub["due_in_days"] == self.days_passed:
-                    if self.checking_balance >= sub["cost"]:
-                        self.checking_balance -= sub["cost"]
-                        self.task_scores["cash_flow"] = 1.0
-                    else:
-                        self.checking_balance -= sub["cost"]
-                        self.checking_balance -= 35.0  # overdraft
-                        reward -= 2.0
-                        self.task_scores["cash_flow"] = 0.0
-                        done = True
+        # Cash flow: auto-deduct rent on due day (only for cash_flow task)
+        if task_id == "cash_flow":
+            for sub in self.subscriptions:
+                if sub.get("due_in_days") is not None:
+                    if sub["due_in_days"] == self.days_passed:
+                        if self.checking_balance >= sub["cost"]:
+                            self.checking_balance -= sub["cost"]
+                            self.task_scores["cash_flow"] = 1.0
+                            done = True
+                        else:
+                            self.checking_balance -= sub["cost"]
+                            self.checking_balance -= 35.0  # overdraft fee
+                            reward -= 2.0
+                            self.task_scores["cash_flow"] = 0.0
+                            done = True
                         
         if self._state.step_count >= 100:
             done = True
@@ -176,8 +193,8 @@ class FinanceOptimizerEnvironment(Environment):
             return subscription_grader_inst(cancelled, 2)
             
         elif task_id == "cash_flow":
-            improvement = self.checking_balance - 1200.0
-            return cash_flow_grader_inst(improvement, 500.0)
+            # Score based on whether overdraft was avoided (task_score=1.0) or not (0.0)
+            return cash_flow_grader_inst(self.task_scores["cash_flow"], 1.0)
             
         return 0.001
 
