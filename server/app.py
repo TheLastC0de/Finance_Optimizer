@@ -197,6 +197,22 @@ async def run_baseline():
                 else:
                     action_dict = {"action_type": "SetAlert", "text": "done"}
 
+            elif task_id == "debt_avalanche":
+                if obs.checking_balance > 500:
+                    action_dict = {
+                        "action_type": "PayCreditCard",
+                        "from_account": "Checking",
+                        "amount": obs.checking_balance - 500,
+                    }
+                elif obs.savings_balance > 0:
+                    action_dict = {
+                        "action_type": "PayCreditCard",
+                        "from_account": "Savings",
+                        "amount": obs.savings_balance,
+                    }
+                else:
+                    action_dict = {"action_type": "SetAlert", "text": "done"}
+
             elif task_id == "duplicate_charge_alert":
                 action_dict = {"action_type": "SetAlert", "text": "tx_dup_copy"}
 

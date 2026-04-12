@@ -25,15 +25,15 @@ class FinanceOptimizerAction(Action):
         text: Text for SetAlert.
     """
 
-    action_type: Literal["CategorizeTransaction", "CancelSubscription", "TransferFunds", "SetAlert"] = Field(
+    action_type: Literal["CategorizeTransaction", "CancelSubscription", "TransferFunds", "PayCreditCard", "SetAlert"] = Field(
         ..., description="Type of action to perform"
     )
     tx_id: Optional[str] = Field(None, description="Transaction ID for CategorizeTransaction")
     category: Optional[str] = Field(None, description="Category for CategorizeTransaction")
     vendor_name: Optional[str] = Field(None, description="Vendor name for CancelSubscription")
-    from_account: Optional[str] = Field(None, description="Source account for TransferFunds")
+    from_account: Optional[str] = Field(None, description="Source account for TransferFunds or PayCreditCard")
     to_account: Optional[str] = Field(None, description="Destination account for TransferFunds")
-    amount: Optional[float] = Field(None, description="Amount to transfer for TransferFunds")
+    amount: Optional[float] = Field(None, description="Amount to transfer or pay")
     text: Optional[str] = Field(None, description="Text for SetAlert")
 
 
@@ -47,6 +47,8 @@ class FinanceOptimizerObservation(Observation):
         subscriptions: Active recurring subscriptions.
         checking_balance: Checking account balance.
         savings_balance: Savings account balance.
+        credit_card_balance: Current balance on high-interest credit card.
+        credit_card_apr: Annual Percentage Rate for credit card debt.
         metadata: Task progress and scores.
         final_score: Final grader score in [0, 1]; only set at episode end.
     """
@@ -55,5 +57,7 @@ class FinanceOptimizerObservation(Observation):
     subscriptions: List[Dict[str, Any]] = Field(default_factory=list, description="Active recurring subscriptions")
     checking_balance: float = Field(default=0.0, description="Checking account balance")
     savings_balance: float = Field(default=0.0, description="Savings account balance")
+    credit_card_balance: float = Field(default=0.0, description="Credit card balance")
+    credit_card_apr: float = Field(default=0.22, description="Credit card APR (e.g. 0.22 for 22%)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Task progress and scores")
     final_score: Optional[float] = None

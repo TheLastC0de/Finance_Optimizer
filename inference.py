@@ -193,6 +193,18 @@ RULES:
 Example:
 {"action_type": "TransferFunds", "from_account": "Checking", "to_account": "Savings", "amount": 1500.0}""",
 
+    "debt_avalanche": """You are a debt optimization specialist. Your job is to pay off high-interest credit card debt using available funds while maintaining a safety net.
+
+RULES:
+- Credit card debt costs ~22% APR, while Savings only earns 1%.
+- Priority: Pay off Credit Card as fast as possible.
+- Minimum: Keep at least $500 in Checking for daily expenses.
+- Use PayCreditCard with from_account ("Checking" or "Savings") and the amount.
+- When debt is $0, use SetAlert text="done".
+
+Example:
+{"action_type": "PayCreditCard", "from_account": "Checking", "amount": 1000.0}""",
+
     "duplicate_charge_alert": """You are a charge auditor. Your job is to identify a duplicate charge in the ledger and alert the system.
 
 RULES:
@@ -251,6 +263,15 @@ def _build_observation_context(obs: Any, task_name: str) -> str:
             f"Excess available: ${max(0, obs.checking_balance - 500):.2f}"
         )
     
+    elif task_name == "debt_avalanche":
+        return (
+            f"Checking: ${obs.checking_balance:.2f}\n"
+            f"Savings: ${obs.savings_balance:.2f}\n"
+            f"Credit Card Balance: ${obs.credit_card_balance:.2f}\n"
+            f"Credit Card APR: {obs.credit_card_apr:.0%}\n"
+            f"Target: Pay off all debt while keeping $500 in Checking."
+        )
+
     elif task_name == "duplicate_charge_alert":
         # Group by (vendor, amount) to find duplicates
         from collections import Counter
