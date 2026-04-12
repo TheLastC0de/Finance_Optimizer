@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from uuid import uuid4
+from datetime import datetime, timedelta
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
@@ -21,6 +22,57 @@ fraud_grader_inst = FraudGrader()
 savings_grader_inst = SavingsGrader()
 duplicate_grader_inst = DuplicateGrader()
 
+# ─── Vendor → Category mapping (canonical source of truth) ───
+VENDOR_CATEGORIES: Dict[str, str] = {
+    # Transportation
+    "UBER *TRIP": "Transportation",
+    "LYFT *RIDE": "Transportation",
+    "BART *TRANSIT": "Transportation",
+    "LIME *SCOOTER": "Transportation",
+    # Groceries
+    "SAFEWAY #33": "Groceries",
+    "WHOLEFOODS": "Groceries",
+    "TRADER JOE": "Groceries",
+    "TARGET *GROC": "Groceries",
+    # Dining
+    "DOORDASH": "Dining",
+    "GRUBHUB": "Dining",
+    "STARBUCKS #12": "Dining",
+    "CHIPOTLE #09": "Dining",
+    # Entertainment
+    "AMC THEATERS": "Entertainment",
+    "STEAM GAMES": "Entertainment",
+    "SPOTIFY PREMIUM": "Entertainment",
+    "TICKETMASTER": "Entertainment",
+    # Utilities
+    "PG&E ELECTRIC": "Utilities",
+    "AT&T WIRELESS": "Utilities",
+    "COMCAST CABLE": "Utilities",
+    "WATER DEPT": "Utilities",
+}
+
+# Group vendors by category for data generation
+VENDORS_BY_CATEGORY: Dict[str, List[str]] = {}
+for _vendor, _cat in VENDOR_CATEGORIES.items():
+    VENDORS_BY_CATEGORY.setdefault(_cat, []).append(_vendor)
+
+# Subscription pool for randomized generation
+SUBSCRIPTION_POOL = [
+    {"vendor_name": "Netflix", "cost": 15.99, "type": "streaming"},
+    {"vendor_name": "Spotify", "cost": 9.99, "type": "streaming"},
+    {"vendor_name": "HBO Max", "cost": 15.99, "type": "streaming"},
+    {"vendor_name": "Disney+", "cost": 7.99, "type": "streaming"},
+    {"vendor_name": "YouTube Premium", "cost": 13.99, "type": "streaming"},
+    {"vendor_name": "Planet Fitness", "cost": 25.0, "type": "gym"},
+    {"vendor_name": "Equinox", "cost": 200.0, "type": "gym"},
+    {"vendor_name": "24 Hour Fitness", "cost": 50.0, "type": "gym"},
+    {"vendor_name": "Adobe Creative", "cost": 54.99, "type": "software"},
+    {"vendor_name": "Dropbox Plus", "cost": 11.99, "type": "software"},
+    {"vendor_name": "AWS", "cost": 29.99, "type": "cloud"},
+    {"vendor_name": "iCloud+", "cost": 2.99, "type": "cloud"},
+]
+
+
 class FinanceOptimizerEnvironment(Environment):
     SUPPORTS_CONCURRENT_SESSIONS: bool = True
 
@@ -29,7 +81,7 @@ class FinanceOptimizerEnvironment(Environment):
             "task_id": "ledger_cleanup",
             "name": "Ledger Cleanup",
             "difficulty": "easy",
-            "description": "Correctly categorize 50 raw transactions.",
+            "description": "Correctly categorize 50 raw transactions across 5 spending categories.",
             "data_corpus": [],
             "aliases": ["task_easy", "categorize_transactions"]
         },
@@ -37,7 +89,7 @@ class FinanceOptimizerEnvironment(Environment):
             "task_id": "subscription_audit",
             "name": "Subscription Audit",
             "difficulty": "medium",
-            "description": "Identify and cancel duplicate or unused subscriptions.",
+            "description": "Identify and cancel duplicate or unused subscriptions from a realistic portfolio.",
             "data_corpus": [],
             "aliases": ["task_medium", "cancel_subscriptions"]
         },
@@ -77,8 +129,8 @@ class FinanceOptimizerEnvironment(Environment):
 
     def __init__(self):
         self._state = State(episode_id=str(uuid4()), step_count=0)
-        self.ledger = []
-        self.subscriptions = []
+        self.ledger: List[Dict[str, Any]] = []
+        self.subscriptions: List[Dict[str, Any]] = []
         self.checking_balance = 1200.0
         self.savings_balance = 1000.0
         self.days_passed = 0
@@ -91,6 +143,8 @@ class FinanceOptimizerEnvironment(Environment):
             "duplicate_charge_alert": 0.0
         }
         self.original_excess = 0.0
+        self.is_done = False
+        self._num_unnecessary_subs = 0
 
     def reset(self, seed: int | None = None, task_id: str | None = None, **kwargs) -> FinanceOptimizerObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
@@ -98,37 +152,99 @@ class FinanceOptimizerEnvironment(Environment):
         self.task_scores = {k: 0.0 for k in self.task_scores}
         
         rng = np.random.RandomState(seed if seed is not None else int(uuid4().int % 2**32))
+        base_date = datetime(2026, 3, 1)
         
+        # ── Generate diverse ledger ──
         self.ledger = []
-        vendors_transport = ["UBER *TRIP", "LYFT *RIDE", "BART *TRANSIT", "LIME *SCOOTER"]
-        vendors_groceries = ["SAFEWAY #33", "WHOLEFOODS", "TRADER JOE", "TARGET *GROC"]
+        all_categories = list(VENDORS_BY_CATEGORY.keys())
         
-        # Base realistic ledger
         for i in range(50):
-            if rng.rand() > 0.5:
-                vendor = rng.choice(vendors_transport)
-                amount = -round(float(rng.uniform(5.0, 35.0)), 2)
-            else:
-                vendor = rng.choice(vendors_groceries)
-                amount = -round(float(rng.uniform(20.0, 150.0)), 2)
-            self.ledger.append({"id": f"tx_{i}", "vendor": vendor, "amount": amount, "category": "Uncategorized"})
+            cat = rng.choice(all_categories)
+            vendor = rng.choice(VENDORS_BY_CATEGORY[cat])
             
-        self.subscriptions = [
-            {"vendor_name": "Netflix_Primary", "cost": 15.99, "type": "streaming", "duplicate": False},
-            {"vendor_name": "Netflix_Duplicate", "cost": 15.99, "type": "streaming", "duplicate": True},
-            {"vendor_name": "Gym", "cost": float(rng.choice([50.0, 75.0, 100.0])), "type": "gym", "last_visit_days_ago": int(rng.uniform(60, 120))},
-            {"vendor_name": "Rent", "cost": float(rng.choice([1500.0, 1800.0, 2000.0])), "type": "housing", "due_in_days": int(rng.uniform(3, 10))}
-        ]
+            # Realistic amount ranges per category
+            if cat == "Transportation":
+                amount = -round(float(rng.uniform(5.0, 45.0)), 2)
+            elif cat == "Groceries":
+                amount = -round(float(rng.uniform(15.0, 180.0)), 2)
+            elif cat == "Dining":
+                amount = -round(float(rng.uniform(8.0, 75.0)), 2)
+            elif cat == "Entertainment":
+                amount = -round(float(rng.uniform(10.0, 120.0)), 2)
+            else:  # Utilities
+                amount = -round(float(rng.uniform(30.0, 250.0)), 2)
+            
+            tx_date = base_date + timedelta(days=int(rng.uniform(0, 60)))
+            
+            self.ledger.append({
+                "id": f"tx_{i}",
+                "vendor": vendor,
+                "amount": amount,
+                "category": "Uncategorized",
+                "date": tx_date.strftime("%Y-%m-%d"),
+            })
+            
+        # ── Generate randomized subscriptions ──
+        pool_indices = list(range(len(SUBSCRIPTION_POOL)))
+        rng.shuffle(pool_indices)
+        num_subs = int(rng.randint(5, 8))
+        selected = pool_indices[:num_subs]
         
-        self.checking_balance = round(float(rng.uniform(800.0, 1500.0)), 2)
+        self.subscriptions = []
+        self._num_unnecessary_subs = 0
+        
+        for idx in selected:
+            base_sub = SUBSCRIPTION_POOL[idx].copy()
+            base_sub["duplicate"] = False
+            base_sub["last_visit_days_ago"] = 0
+            
+            # ~30% chance of being a duplicate
+            if rng.rand() < 0.3:
+                base_sub["duplicate"] = True
+                self._num_unnecessary_subs += 1
+            # ~25% chance of being unused (gym/software types)
+            elif base_sub["type"] in ("gym", "software") and rng.rand() < 0.5:
+                base_sub["last_visit_days_ago"] = int(rng.uniform(90, 180))
+                self._num_unnecessary_subs += 1
+                
+            self.subscriptions.append(base_sub)
+        
+        # Always add rent (never cancellable)
+        rent_cost = float(rng.choice([1500.0, 1800.0, 2000.0, 2200.0]))
+        self.subscriptions.append({
+            "vendor_name": "Rent",
+            "cost": rent_cost,
+            "type": "housing",
+            "due_in_days": int(rng.uniform(3, 10)),
+            "duplicate": False,
+            "last_visit_days_ago": 0,
+        })
+        
+        # Ensure at least 1 unnecessary sub exists for subscription_audit
+        if self._num_unnecessary_subs == 0:
+            # Force a random non-rent sub to be duplicate
+            non_rent = [s for s in self.subscriptions if s["type"] != "housing"]
+            if non_rent:
+                target = rng.choice(non_rent)
+                target["duplicate"] = True
+                self._num_unnecessary_subs = 1
+        
+        self.checking_balance = round(float(rng.uniform(800.0, 1800.0)), 2)
         self.savings_balance = round(float(rng.uniform(500.0, 3000.0)), 2)
         self.days_passed = 0
         self.original_excess = 0.0
         self.is_done = False
 
-        # Inject task-specific state invariants
+        # ── Task-specific state invariants ──
         if self._state.task_id == "fraud_categorization":
-            self.ledger.append({"id": "tx_fraud_99", "vendor": "UNKNOWN INTL *RUSSIA", "amount": -round(float(rng.uniform(3000.0, 8000.0)), 2), "category": "Uncategorized"})
+            fraud_vendors = ["UNKNOWN INTL *RUSSIA", "WIRE *OFFSHORE", "CRYPTO *ANON"]
+            self.ledger.append({
+                "id": "tx_fraud_99",
+                "vendor": rng.choice(fraud_vendors),
+                "amount": -round(float(rng.uniform(3000.0, 8000.0)), 2),
+                "category": "Uncategorized",
+                "date": (base_date + timedelta(days=int(rng.uniform(0, 60)))).strftime("%Y-%m-%d"),
+            })
             
         elif self._state.task_id == "savings_builder":
             self.checking_balance = round(float(rng.uniform(2000.0, 4000.0)), 2)
@@ -136,10 +252,12 @@ class FinanceOptimizerEnvironment(Environment):
             self.original_excess = self.checking_balance - 500.0
 
         elif self._state.task_id == "duplicate_charge_alert":
-            dup_vendor = rng.choice(["AMAZON.COM", "APPLE.COM", "STEAM GAMES"])
-            dup_amount = -round(float(rng.uniform(50.0, 200.0)), 2)
-            self.ledger.append({"id": "tx_dup_orig", "vendor": dup_vendor, "amount": dup_amount, "category": "Uncategorized"})
-            self.ledger.append({"id": "tx_dup_copy", "vendor": dup_vendor, "amount": dup_amount, "category": "Uncategorized"})
+            dup_vendors = ["AMAZON.COM", "APPLE.COM", "STEAM GAMES", "BEST BUY"]
+            dup_vendor = rng.choice(dup_vendors)
+            dup_amount = -round(float(rng.uniform(50.0, 300.0)), 2)
+            dup_date = (base_date + timedelta(days=int(rng.uniform(0, 60)))).strftime("%Y-%m-%d")
+            self.ledger.append({"id": "tx_dup_orig", "vendor": dup_vendor, "amount": dup_amount, "category": "Uncategorized", "date": dup_date})
+            self.ledger.append({"id": "tx_dup_copy", "vendor": dup_vendor, "amount": dup_amount, "category": "Uncategorized", "date": dup_date})
             
         return self._get_obs(reward=0.0)
 
@@ -147,7 +265,8 @@ class FinanceOptimizerEnvironment(Environment):
         metadata = {
             "tasks": self.TASKS,
             "task_scores": self.task_scores,
-            "step": self._state.step_count
+            "step": self._state.step_count,
+            "vendor_categories": VENDOR_CATEGORIES,  # expose mapping to agents
         }
         return FinanceOptimizerObservation(
             ledger=self.ledger,
@@ -168,39 +287,47 @@ class FinanceOptimizerEnvironment(Environment):
         if action.action_type == "CategorizeTransaction":
             for tx in self.ledger:
                 if tx["id"] == action.tx_id:
-                    if tx["vendor"] == "UBER *TRIP" and action.category == "Transportation":
-                        if tx["category"] != "Transportation":
-                            tx["category"] = "Transportation"
-                            reward += 0.1
-                            self.task_scores["ledger_cleanup"] = min(1.0, self.task_scores["ledger_cleanup"] + 0.02)
-                    elif tx["vendor"] == "SAFEWAY #33" and action.category == "Groceries":
-                        if tx["category"] != "Groceries":
-                            tx["category"] = "Groceries"
-                            reward += 0.1
-                            self.task_scores["ledger_cleanup"] = min(1.0, self.task_scores["ledger_cleanup"] + 0.02)
-                    elif tx["vendor"] == "UNKNOWN INTL *RUSSIA" and action.category == "Fraud":
-                        if tx["category"] != "Fraud":
+                    expected_category = VENDOR_CATEGORIES.get(tx["vendor"])
+                    
+                    # Fraud vendors get special handling
+                    if tx["vendor"] in ("UNKNOWN INTL *RUSSIA", "WIRE *OFFSHORE", "CRYPTO *ANON"):
+                        if action.category == "Fraud" and tx["category"] != "Fraud":
                             tx["category"] = "Fraud"
                             reward += 1.0
                             self.task_scores["fraud_categorization"] = 1.0
                             if task_id == "fraud_categorization":
                                 done = True
+                    # Standard vendor categorization
+                    elif expected_category and action.category == expected_category:
+                        if tx["category"] != expected_category:
+                            tx["category"] = expected_category
+                            reward += 0.1
+                            self.task_scores["ledger_cleanup"] = min(
+                                1.0, self.task_scores["ledger_cleanup"] + 0.02
+                            )
+                    # Penalty for wrong categorization
+                    elif action.category and action.category != expected_category:
+                        reward -= 0.05
+                    break
 
             # Check if all transactions categorized
             if task_id == "ledger_cleanup":
                 uncategorized = sum(1 for tx in self.ledger if tx["category"] == "Uncategorized")
                 if uncategorized == 0:
                     done = True
-                            
+                             
         elif action.action_type == "CancelSubscription":
             new_subs = []
             for sub in self.subscriptions:
                 if sub["vendor_name"] == action.vendor_name:
                     if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90:
                         reward += 0.5
-                        self.task_scores["subscription_audit"] = min(1.0, self.task_scores["subscription_audit"] + 0.5)
+                        self.task_scores["subscription_audit"] = min(
+                            1.0, self.task_scores["subscription_audit"] + (1.0 / max(self._num_unnecessary_subs, 1))
+                        )
                     else:
-                        new_subs.append(sub)  # Keep valid subscriptions
+                        reward -= 0.3  # penalty for cancelling a valid subscription
+                        new_subs.append(sub)
                 else:
                     new_subs.append(sub)
             self.subscriptions = new_subs
@@ -216,6 +343,8 @@ class FinanceOptimizerEnvironment(Environment):
                 if self.savings_balance >= amt > 0:
                     self.savings_balance -= amt
                     self.checking_balance += amt
+                    if task_id == "cash_flow":
+                        reward += 0.3
             elif action.from_account == "Checking" and action.to_account == "Savings":
                 if self.checking_balance >= amt > 0:
                     self.checking_balance -= amt
@@ -233,7 +362,7 @@ class FinanceOptimizerEnvironment(Environment):
 
         self.days_passed += 1
         
-        # Cash flow: auto-deduct rent on due day (only for cash_flow task)
+        # Cash flow: auto-deduct rent on due day
         if task_id == "cash_flow":
             for sub in self.subscriptions:
                 if sub.get("due_in_days") is not None:
@@ -245,14 +374,17 @@ class FinanceOptimizerEnvironment(Environment):
                         else:
                             self.checking_balance -= sub["cost"]
                             self.checking_balance -= 35.0  # overdraft fee
+                            # Partial credit: how close were we?
+                            shortfall = sub["cost"] - (self.checking_balance + sub["cost"] + 35.0)
+                            partial = max(0.0, 1.0 - abs(shortfall) / sub["cost"])
+                            self.task_scores["cash_flow"] = round(partial * 0.4, 4)  # max 0.4 for overdraft
                             reward -= 2.0
-                            self.task_scores["cash_flow"] = 0.0
                             done = True
                         
         if self._state.step_count >= 100:
             done = True
             
-        # Clip and round reward like the sample repo
+        # Clip and round reward
         reward = round(float(np.clip(reward, -1.0, 1.0)), 4)
         
         obs = self._get_obs(reward=reward, done=done)
@@ -267,16 +399,15 @@ class FinanceOptimizerEnvironment(Environment):
         task_id = self._state.task_id if hasattr(self._state, "task_id") else "ledger_cleanup"
         
         if task_id == "ledger_cleanup":
-            correct = sum(1 for tx in self.ledger if tx.get("category") in ["Transportation", "Groceries"])
+            correct = sum(1 for tx in self.ledger if tx.get("category") in VENDOR_CATEGORIES.values())
             return ledger_grader_inst(correct, 50)
             
         elif task_id == "subscription_audit":
             unnecessary_remaining = sum(1 for sub in self.subscriptions if sub.get("duplicate") or sub.get("last_visit_days_ago", 0) >= 90)
-            cancelled = 2 - unnecessary_remaining
-            return subscription_grader_inst(cancelled, 2)
+            cancelled = self._num_unnecessary_subs - unnecessary_remaining
+            return subscription_grader_inst(cancelled, self._num_unnecessary_subs)
             
         elif task_id == "cash_flow":
-            # Score based on whether overdraft was avoided (task_score=1.0) or not (0.0)
             return cash_flow_grader_inst(self.task_scores["cash_flow"], 1.0)
             
         elif task_id == "fraud_categorization":

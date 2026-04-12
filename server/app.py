@@ -102,6 +102,8 @@ async def health():
 @app.post("/baseline")
 async def run_baseline():
     """Run baseline heuristic agent against all tasks and return scores."""
+    from server.finance_optimizer_environment import VENDOR_CATEGORIES
+    
     task_ids = [t["task_id"] for t in FinanceOptimizerEnvironment.TASKS]
     results = []
     
@@ -123,14 +125,19 @@ async def run_baseline():
                     None,
                 )
                 if target_tx:
-                    action_dict = {
-                        "action_type": "CategorizeTransaction",
-                        "tx_id": target_tx["id"],
-                    }
-                    if "UBER" in target_tx["vendor"]:
-                        action_dict["category"] = "Transportation"
+                    expected_cat = VENDOR_CATEGORIES.get(target_tx["vendor"])
+                    if expected_cat:
+                        action_dict = {
+                            "action_type": "CategorizeTransaction",
+                            "tx_id": target_tx["id"],
+                            "category": expected_cat,
+                        }
                     else:
-                        action_dict["category"] = "Groceries"
+                        action_dict = {
+                            "action_type": "CategorizeTransaction",
+                            "tx_id": target_tx["id"],
+                            "category": "Other",
+                        }
                 else:
                     action_dict = {"action_type": "SetAlert", "text": "done"}
 
@@ -153,19 +160,20 @@ async def run_baseline():
                     action_dict = {"action_type": "SetAlert", "text": "done"}
 
             elif task_id == "cash_flow":
-                if obs.checking_balance < 1500 and obs.savings_balance > 0:
+                if obs.checking_balance < 2500 and obs.savings_balance > 0:
+                    transfer = min(obs.savings_balance, 1000.0)
                     action_dict = {
                         "action_type": "TransferFunds",
                         "from_account": "Savings",
                         "to_account": "Checking",
-                        "amount": 500.0,
+                        "amount": transfer,
                     }
                 else:
                     action_dict = {"action_type": "SetAlert", "text": "wait"}
 
             elif task_id == "fraud_categorization":
                 target_fraud = next(
-                    (tx for tx in obs.ledger if tx["vendor"] == "UNKNOWN INTL *RUSSIA" and tx["category"] != "Fraud"),
+                    (tx for tx in obs.ledger if tx["vendor"] in ("UNKNOWN INTL *RUSSIA", "WIRE *OFFSHORE", "CRYPTO *ANON") and tx["category"] != "Fraud"),
                     None,
                 )
                 if target_fraud:

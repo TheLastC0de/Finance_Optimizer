@@ -1,8 +1,8 @@
 ---
 title: Finance Optimizer Environment Server
-emoji: 📻
-colorFrom: gray
-colorTo: pink
+emoji: 💰
+colorFrom: purple
+colorTo: blue
 sdk: docker
 pinned: false
 app_port: 8000
@@ -11,64 +11,149 @@ tags:
   - openenv
 ---
 
-# Finance Optimizer Environment
+# 💰 Finance Optimizer Environment
 
-A real-world task simulation acting as a personal financial auditor to categorize spending, identify wasted money on forgotten subscriptions, and prevent overdrafts.
+A multi-task reinforcement learning environment that simulates real-world personal finance management. Agents must categorize transactions, audit subscriptions, prevent overdrafts, detect fraud, optimize savings, and identify duplicate charges.
+
+## Architecture
+
+```mermaid
+graph LR
+    A[LLM Agent] -->|WebSocket| B[FastAPI Server]
+    B --> C[Environment Engine]
+    C --> D[Task Router]
+    D --> E1[Ledger Cleanup]
+    D --> E2[Subscription Audit]
+    D --> E3[Cash Flow]
+    D --> E4[Fraud Detection]
+    D --> E5[Savings Builder]
+    D --> E6[Duplicate Alert]
+    C --> F[Grader Pipeline]
+    F --> G[Score 0.0 - 1.0]
+```
+
+## Tasks & Difficulty
+
+| Task | Difficulty | Goal | Grading |
+|------|-----------|------|---------|
+| `ledger_cleanup` | 🟢 Easy | Categorize 50 transactions across 5 categories | % correctly categorized |
+| `subscription_audit` | 🟡 Medium | Cancel duplicate/unused subscriptions | % wasteful subs removed |
+| `fraud_categorization` | 🟡 Medium | Flag anomalous international transactions | Binary: found or not |
+| `cash_flow` | 🔴 Hard | Prevent overdraft before rent is due | Binary + partial credit |
+| `savings_builder` | 🔴 Hard | Transfer excess checking to savings (min $500) | % of excess transferred + efficiency |
+| `duplicate_charge_alert` | 🔴 Hard | Identify a duplicate charge by transaction ID | Binary: correct alert or not |
+
+## 5 Spending Categories
+
+The environment generates transactions across **5 realistic categories** with **20 vendor names**:
+
+- **Transportation**: UBER \*TRIP, LYFT \*RIDE, BART \*TRANSIT, LIME \*SCOOTER
+- **Groceries**: SAFEWAY #33, WHOLEFOODS, TRADER JOE, TARGET \*GROC
+- **Dining**: DOORDASH, GRUBHUB, STARBUCKS #12, CHIPOTLE #09
+- **Entertainment**: AMC THEATERS, STEAM GAMES, SPOTIFY PREMIUM, TICKETMASTER
+- **Utilities**: PG&E ELECTRIC, AT&T WIRELESS, COMCAST CABLE, WATER DEPT
 
 ## Quick Start
 
-You can use the environment through the HTTP API:
+### Connect via WebSocket (recommended)
 
 ```python
-import requests
+import asyncio
+from client import FinanceOptimizerEnv
+from models import FinanceOptimizerAction
 
-# Rest
-res = requests.post("http://localhost:8000/reset")
-print(res.json())
+async def main():
+    async with FinanceOptimizerEnv(base_url="http://localhost:8000") as env:
+        result = await env.reset(seed=42, task_id="ledger_cleanup")
+        obs = result.observation
+        
+        while not obs.done:
+            action = FinanceOptimizerAction(
+                action_type="CategorizeTransaction",
+                tx_id="tx_0",
+                category="Transportation"
+            )
+            result = await env.step(action)
+            obs = result.observation
+            print(f"Reward: {obs.reward}, Done: {obs.done}")
 
-# Step
-action = {
-    "action_type": "CategorizeTransaction",
-    "tx_id": "tx_0",
-    "category": "Transportation"
-}
-res = requests.post("http://localhost:8000/step", json={"action": action})
-print(res.json())
+asyncio.run(main())
 ```
 
-## Environment Details
+### HTTP API
 
-### Action
-**FinanceOptimizerAction**: Polymorphic action type
-- `action_type`: "CategorizeTransaction", "CancelSubscription", "TransferFunds", "SetAlert"
-- `tx_id` (str, optional)
-- `category` (str, optional)
-- `vendor_name` (str, optional)
-- `from_account` (str, optional)
-- `to_account` (str, optional)
-- `amount` (float, optional)
-- `text` (str, optional)
+```bash
+# Reset environment
+curl -X POST http://localhost:8000/reset \
+  -H "Content-Type: application/json" \
+  -d '{"seed": 42, "task_id": "ledger_cleanup"}'
 
-### Observation
-- `ledger`: List of recent transactions.
-- `subscriptions`: List of active recurring subscriptions.
-- `checking_balance`: Float.
-- `savings_balance`: Float.
+# Take an action
+curl -X POST http://localhost:8000/step \
+  -H "Content-Type: application/json" \
+  -d '{"action": {"action_type": "CategorizeTransaction", "tx_id": "tx_0", "category": "Transportation"}}'
 
-### Tasks & Grades
-- **Task 1 (Easy): Ledger Cleanup**. Categorize 50 raw transactions correctly. Grade 0.0 - 1.0.
-- **Task 2 (Medium): Subscription Audit**. Identify duplicate subscriptions and cancel them. Grade 0.0 - 1.0.
-- **Task 3 (Hard): Cash Flow**. Simulate 7 days and transfer funds to prevent an overdraft. Grade 0.0 - 1.0.
+# Run baseline heuristic
+curl -X POST http://localhost:8000/baseline
+```
 
-### Baseline Scores
-Running `python scripts/baseline.py` yields:
-- Task 1: 1.0/1.0
-- Task 2: 1.0/1.0
-- Task 3: 1.0/1.0
+## Action Schema
+
+```json
+{
+    "action_type": "CategorizeTransaction | CancelSubscription | TransferFunds | SetAlert",
+    "tx_id": "string (for CategorizeTransaction)",
+    "category": "Transportation | Groceries | Dining | Entertainment | Utilities | Fraud",
+    "vendor_name": "string (for CancelSubscription)",
+    "from_account": "Checking | Savings",
+    "to_account": "Checking | Savings",
+    "amount": 0.0,
+    "text": "string (for SetAlert)"
+}
+```
+
+## Observation Schema
+
+Each step returns:
+- `ledger`: List of transactions with `{id, vendor, amount, category, date}`
+- `subscriptions`: Active subscriptions with `{vendor_name, cost, type, duplicate, last_visit_days_ago}`
+- `checking_balance`: Current checking account balance
+- `savings_balance`: Current savings account balance
+- `metadata`: Task progress, scores, and vendor→category mapping
+- `done`: Whether the episode is complete
+- `reward`: Reward signal for the current step
+
+## Scoring Rubric
+
+All scores are in `[0.001, 0.999]` to provide gradient signal:
+
+- **Ledger Cleanup**: `correct_categories / total_transactions`. Partial credit for each correct categorization.
+- **Subscription Audit**: `cancelled_unnecessary / total_unnecessary`. Must cancel all wasteful subs for full score.
+- **Cash Flow**: `1.0` if overdraft avoided; partial credit (up to `0.4`) if overdraft occurred but agent attempted transfers.
+- **Fraud**: Binary — `0.999` if flagged, `0.001` if missed.
+- **Savings Builder**: `amount_moved / original_excess`. Efficiency bonus for completing in ≤2 steps. Penalty for dropping below minimum.
+- **Duplicate Alert**: Binary — `0.999` if correct ID sent, `0.001` otherwise.
 
 ## Deployment
 
-Deploy via OpenEnv CLI:
 ```bash
-openenv push --namespace my-org
+# Deploy to Hugging Face Spaces
+.\deploy.ps1
+
+# Or manually
+set PYTHONIOENCODING=utf-8
+openenv push
+```
+
+## Development
+
+```bash
+# Install dependencies
+uv sync
+
+# Run locally
+uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
+
+# Run inference
+python inference.py
 ```
