@@ -3,8 +3,8 @@ import os
 import sys
 from typing import Any, List, Optional
 
-from finance_optimizer.client import FinanceOptimizerEnv
-from finance_optimizer.models import FinanceOptimizerAction
+from client import FinanceOptimizerEnv
+from models import FinanceOptimizerAction
 
 ENV_URL = os.getenv("ENV_URL", "http://localhost:8000")
 TASK_NAME = os.getenv("TASK_NAME", "")

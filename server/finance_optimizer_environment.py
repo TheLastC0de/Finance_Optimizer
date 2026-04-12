@@ -3,10 +3,10 @@ from uuid import uuid4
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import State
 
-from finance_optimizer.models import FinanceOptimizerAction, FinanceOptimizerObservation
+from models import FinanceOptimizerAction, FinanceOptimizerObservation
 
 import numpy as np
-from finance_optimizer.server.grader import LedgerGrader, SubscriptionGrader, CashFlowGrader
+from server.grader import LedgerGrader, SubscriptionGrader, CashFlowGrader
 
 # Initialize singletons for environment loop
 ledger_grader_inst = LedgerGrader()
@@ -56,7 +56,7 @@ class FinanceOptimizerEnvironment(Environment):
             "cash_flow": 0.0
         }
 
-    def reset(self, seed: int | None = None, task_id: str | None = None) -> FinanceOptimizerObservation:
+    def reset(self, seed: int | None = None, task_id: str | None = None, **kwargs) -> FinanceOptimizerObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self._state.task_id = task_id or "ledger_cleanup"
         self.task_scores = {k: 0.0 for k in self.task_scores}
