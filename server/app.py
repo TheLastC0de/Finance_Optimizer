@@ -45,7 +45,7 @@ app = create_app(
     FinanceOptimizerAction,
     FinanceOptimizerObservation,
     env_name="finance_optimizer",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    max_concurrent_envs=10,  # increase this number to allow more concurrent WebSocket sessions
 )
 
 from typing import Any, List
@@ -221,7 +221,7 @@ async def run_baseline():
 
 
 
-def main(host: str = "0.0.0.0", port: int = 7860):
+def main(host: str = "0.0.0.0", port: int = 8000):
     """
     Entry point for direct execution via uv run or python -m.
 

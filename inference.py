@@ -255,7 +255,15 @@ async def main() -> None:
     env = FinanceOptimizerEnv(base_url=ENV_URL)
 
     try:
-        await env.connect()
+        try:
+            await env.connect()
+        except Exception as conn_exc:
+            print(f"[DEBUG] Failed to connect to environment server at {ENV_URL}: {conn_exc}", file=sys.stderr, flush=True)
+            for task_name in tasks_to_run:
+                log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
+                log_end(success=False, steps=0, score=0.0, rewards=[])
+            return
+
         for task_name in tasks_to_run:
             seed = BASE_SEED
             await run_task(task_name, client, env, seed)
