@@ -49,6 +49,7 @@ class FinanceOptimizerObservation(Observation):
         savings_balance: Savings account balance.
         credit_card_balance: Current balance on high-interest credit card.
         credit_card_apr: Annual Percentage Rate for credit card debt.
+        credit_score: FICO-style credit score (300-850).
         metadata: Task progress and scores.
         final_score: Final grader score in [0, 1]; only set at episode end.
     """
@@ -59,5 +60,6 @@ class FinanceOptimizerObservation(Observation):
     savings_balance: float = Field(default=0.0, description="Savings account balance")
     credit_card_balance: float = Field(default=0.0, description="Credit card balance")
     credit_card_apr: float = Field(default=0.22, description="Credit card APR (e.g. 0.22 for 22%)")
+    credit_score: int = Field(default=700, description="FICO-style credit score (300-850)")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Task progress and scores")
     final_score: Optional[float] = None

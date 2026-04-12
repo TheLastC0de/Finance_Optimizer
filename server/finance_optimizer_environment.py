@@ -14,6 +14,7 @@ from graders.fraud_grader import FraudGrader
 from graders.savings_grader import SavingsGrader
 from graders.duplicate_grader import DuplicateGrader
 from graders.health_score_grader import HealthScoreGrader
+from graders.debt_grader import DebtGrader
 
 # Initialize singletons for environment loop
 ledger_grader_inst = LedgerGrader()
@@ -23,6 +24,7 @@ fraud_grader_inst = FraudGrader()
 savings_grader_inst = SavingsGrader()
 duplicate_grader_inst = DuplicateGrader()
 health_score_grader_inst = HealthScoreGrader()
+debt_grader_inst = DebtGrader()
 
 # ─── Vendor → Category mapping (canonical source of truth) ───
 VENDOR_CATEGORIES: Dict[str, str] = {
@@ -130,7 +132,7 @@ class FinanceOptimizerEnvironment(Environment):
             "task_id": "debt_avalanche",
             "name": "Debt Avalanche",
             "difficulty": "extreme",
-            "description": "Optimize between high-interest credit card debt and low-interest savings.",
+            "description": "Optimize between high-interest credit card debt and low-interest savings while maintaining a $500 checking buffer.",
             "data_corpus": [],
             "aliases": ["task_debt", "pay_off_debt"]
         },
@@ -152,6 +154,7 @@ class FinanceOptimizerEnvironment(Environment):
         self.savings_balance = 1000.0
         self.credit_card_balance = 0.0
         self.credit_card_apr = 0.22
+        self.credit_score = 700
         self.days_passed = 0
         self.task_scores = {
             "ledger_cleanup": 0.0,
@@ -257,6 +260,7 @@ class FinanceOptimizerEnvironment(Environment):
         self.savings_balance = round(float(self._rng.uniform(500.0, 3000.0)), 2)
         self.credit_card_balance = 0.0
         self.credit_card_apr = round(float(self._rng.uniform(0.18, 0.28)), 2)
+        self.credit_score = int(self._rng.randint(650, 750))
         self.days_passed = 0
         self.original_excess = 0.0
         self.original_debt = 0.0
@@ -308,6 +312,7 @@ class FinanceOptimizerEnvironment(Environment):
             savings_balance=self.savings_balance,
             credit_card_balance=self.credit_card_balance,
             credit_card_apr=self.credit_card_apr,
+            credit_score=self.credit_score,
             done=done,
             reward=reward,
             metadata=metadata
@@ -319,9 +324,13 @@ class FinanceOptimizerEnvironment(Environment):
         done = False
         task_id = getattr(self._state, "task_id", "ledger_cleanup")
         
-        # ── Interest Logic ──
-        # Daily interest: CC APR / 365, Savings Rate: 0.01 / 365
+        # ── Interest & Score Decay ──
+        # Interest logic
+        old_cc = self.credit_card_balance
         self.credit_card_balance = round(self.credit_card_balance * (1 + self.credit_card_apr / 365.0), 2)
+        if self.credit_card_balance > old_cc:
+            self.credit_score = max(300, self.credit_score - 1) # Punish carrying high debt
+            
         self.savings_balance = round(self.savings_balance * (1 + 0.01 / 365.0), 2)
 
         # ── Adaptive Events (Dynamic Life Scenarios) ──
@@ -347,6 +356,7 @@ class FinanceOptimizerEnvironment(Environment):
                             tx["category"] = "Fraud"
                             reward += 1.0
                             self._successful_actions += 1
+                            self.credit_score = min(850, self.credit_score + 5)
                             self.task_scores["fraud_categorization"] = 1.0
                             if task_id == "fraud_categorization":
                                 done = True
@@ -413,13 +423,19 @@ class FinanceOptimizerEnvironment(Environment):
                 self.checking_balance -= payment
                 self.credit_card_balance -= payment
                 self._successful_actions += 1
+                self.credit_score = min(850, self.credit_score + 2)
                 if task_id == "debt_avalanche":
                     reward += 0.5
+                    # Brutal Constraint Check: If paying leaves < $500, penalize
+                    if self.checking_balance < 500:
+                        reward -= 0.5
+                        self.credit_score = max(300, self.credit_score - 10)
             elif from_acc == "Savings" and self.savings_balance >= amt > 0:
                 payment = min(amt, self.credit_card_balance)
                 self.savings_balance -= payment
                 self.credit_card_balance -= payment
                 self._successful_actions += 1
+                self.credit_score = min(850, self.credit_score + 2)
                 if task_id == "debt_avalanche":
                     reward += 0.5
 
@@ -445,6 +461,7 @@ class FinanceOptimizerEnvironment(Environment):
                         else:
                             self.checking_balance -= sub["cost"]
                             self.checking_balance -= 35.0
+                            self.credit_score = max(300, self.credit_score - 50) # Heavy FICO penalty for overdraft
                             shortfall = sub["cost"] - (self.checking_balance + sub["cost"] + 35.0)
                             partial = max(0.0, 1.0 - abs(shortfall) / sub["cost"])
                             self.task_scores["cash_flow"] = round(partial * 0.4, 4)
@@ -476,11 +493,10 @@ class FinanceOptimizerEnvironment(Environment):
         # Calculate Global Health Metrics
         current_net_worth = self.checking_balance + self.savings_balance - self.credit_card_balance
         net_worth_growth = current_net_worth / self.initial_net_worth if self.initial_net_worth != 0 else 1.0
-        debt_paid = (self.original_debt - self.credit_card_balance) / self.original_debt if self.original_debt > 0 else 1.0
-        budget_adherence = self._successful_actions / max(self._state.step_count, 1)
+        debt_paid_pct = (self.original_debt - self.credit_card_balance) / self.original_debt if self.original_debt > 0 else 1.0
 
         # Baseline Health Score (Impressive for judges)
-        health_score = health_score_grader_inst(net_worth_growth, debt_paid, budget_adherence)
+        health_score = health_score_grader_inst(net_worth_growth, debt_paid_pct, self.credit_score)
 
         if task_id == "ledger_cleanup":
             correct = sum(1 for tx in self.ledger if tx.get("category") in VENDOR_CATEGORIES.values())
@@ -496,7 +512,7 @@ class FinanceOptimizerEnvironment(Environment):
         elif task_id == "savings_builder":
             primary_score = savings_grader_inst(self.checking_balance, 500.0, self.original_excess, self._state.step_count)
         elif task_id == "debt_avalanche":
-            primary_score = float(np.clip(debt_paid, 0.001, 0.999))
+            primary_score = debt_grader_inst(debt_paid_pct, self.checking_balance)
         elif task_id == "duplicate_charge_alert":
             primary_score = duplicate_grader_inst(self.task_scores["duplicate_charge_alert"] == 1.0)
         else:
